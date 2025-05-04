@@ -1,155 +1,211 @@
-package com.example.wsplayer.ui.auth // Váš balíček + .ui.auth
+// app/src/main/java/com/example/wsplayer/ui/auth/LoginViewModel.kt
+package com.example.wsplayer.ui.auth // Váš balíček - ZKONTROLUJTE
 
-import androidx.lifecycle.LiveData // Import pro LiveData
-import androidx.lifecycle.MutableLiveData // Import pro MutableLiveData
-import androidx.lifecycle.ViewModel // Import pro ViewModel
-import androidx.lifecycle.viewModelScope // Import pro viewModelScope
-import com.example.wsplayer.data.models.UserDataResponse // **Import pro UserDataResponse**
-import com.example.wsplayer.data.repository.WebshareRepository // Import Repository
-import kotlinx.coroutines.launch // Import pro spuštění Coroutine
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope // Pro práci s coroutines ve ViewModelu
 
-// TODO: Pokud budete předávat argumenty ViewModelu přes SavedStateHandle, importujte toto:
-// import androidx.lifecycle.SavedStateHandle
+// **Import Repository**
+import com.example.wsplayer.data.repository.WebshareRepository
+
+// **Import pro modelové třídy a stavy**
+// ZKONTROLUJTE, že cesta odpovídá vašemu umístění DataModels.kt
+import com.example.wsplayer.data.models.UserDataResponse // Používá se při načítání uživatelských dat
+import com.example.wsplayer.data.models.LoginResponse // Používá se pro parsování login odpovědi (uvnitř Repository)
+
+import kotlinx.coroutines.Dispatchers // Pro přepnutí kontextu (background vlákna)
+import kotlinx.coroutines.launch // Pro spouštění coroutines
+import kotlinx.coroutines.withContext // Pro přepnutí kontextu uvnitř coroutine
 
 
-// ViewModel pro správu stavu přihlašování a uživatelských dat
-// Přijímá WebshareRepository v konstruktoru (předává Factory)
+// ViewModel pro přihlašovací obrazovku (MainActivity)
+// Spravuje stav UI a logiku přihlášení
+// Přijímá instanci WebshareRepository v konstruktoru (dodá LoginViewModelFactory)
 class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
-    // TODO: Pokud budete předávat argumenty ViewModelu přes SavedStateHandle, přidejte ho do konstruktoru:
-    // class PlayerViewModel(private val repository: WebshareRepository, private val savedStateHandle: SavedStateHandle) : ViewModel() {
 
-    // LiveData pro sledování stavu přihlášení z UI
-    private val _loginState = MutableLiveData<LoginState>()
-    val loginState: LiveData<LoginState> = _loginState // Exponovaná LiveData pro UI
+    // --- Stavy pro UI (LiveData) ---
 
-    // Sealed třída pro reprezentaci různých stavů přihlašování
+    // Sealed class reprezentující různé stavy procesu přihlašování
+    // Definovaná přímo zde, pokud ji nepoužíváte jinde
+    // Pokud ji používáte jinde, měla by být v data.models a zde naimportována
     sealed class LoginState {
-        object Idle : LoginState() // <- Dědí správně
-        object Loading : LoginState() // <- Dědí správně
-        data class Success(val token: String) : LoginState() // <- Dědí správně
-        data class Error(val message: String) : LoginState() // <-- **PŘIDÁNO DĚDĚNÍ ZDE!**
-        // TODO: Volitelně: LoadingAutoLogin stav
+        object Idle : LoginState() // Počáteční stav / zobrazení formuláře
+        object Loading : LoginState() // Probíhá přihlašování / auto-login
+        data class Success(val token: String) : LoginState() // Přihlášení úspěšné (nese token)
+        data class Error(val message: String) : LoginState() // Došlo k chybě (nese zprávu)
+        // TODO: Případně přidat stav pro auto-login selhání s možností zkusit manuálně
     }
 
-    // LiveData pro uchování uživatelských dat
-    private val _userData = MutableLiveData<UserDataResponse?>(null)
-    val userData: LiveData<UserDataResponse?> = _userData // Exponovaná LiveData pro UI
+    // Stav aktuálního přihlašování
+    private val _loginState = MutableLiveData<LoginState>(LoginState.Idle)
+    val loginState: LiveData<LoginState> = _loginState // Activity sleduje tento LiveData
+
+    // **LiveData pro uživatelská data** (volitelné, pokud je LoginActivity zobrazuje)
+    // private val _userData = MutableLiveData<UserDataResponse?>()
+    // val userData: LiveData<UserDataResponse?> = _userData
 
 
+    // Inicializační blok - spustí se PŘI PRVNÍM vytvoření ViewModelu
+    // Toto se stane při startu MainActivity, pokud není zničena systémem
     init {
-        _loginState.value = LoginState.Idle // Nastaví počáteční stav na Idle (formulář)
-        _userData.value = null // Inicializujte uživatelská data na null
-
-        // Při inicializaci ViewModelu se zkusíme automaticky přihlásit, pokud jsou uložené údaje
-        checkAutoLogin() // Spustí auto-login logiku
+        println("LoginViewModel: Init blok spuštěn. PID: ${android.os.Process.myPid()}") // Log
+        // Při startu aplikace se pokusíme o auto-login
+        checkAutoLogin()
     }
 
-    // Funkce pro pokus o automatické přihlášení
-    private fun checkAutoLogin() {
+    // --- Metoda pro auto-login ---
+    // Pokusí se přihlásit pomocí uložených credentials
+    fun checkAutoLogin() {
+        println("LoginViewModel: checkAutoLogin() volán.") // Log
+        // Zkontrolovat, zda již nejsme ve stavu Loading nebo Success (abychom nespouštěli auto-login vícekrát)
+        if (_loginState.value == LoginState.Loading || _loginState.value is LoginState.Success) {
+            println("LoginViewModel: Již probíhá načítání nebo je přihlášeno, přeskakuji auto-login.") // Log
+            return
+        }
+
+        _loginState.value = LoginState.Loading // Nastavit stav na načítání (během auto-loginu)
+
         viewModelScope.launch {
-            val credentials = repository.loadCredentials() // Načte uložené credentials
+            println("LoginViewModel: Spouštím auto-login coroutine.") // Log
+            val credentials = repository.loadCredentials() // Načíst uložené credentials
 
             if (credentials != null) {
-                val (username, password) = credentials
+                val (username, passwordHash) = credentials
+                println("LoginViewModel: Nalezeny uložené credentials. Pokouším se přihlásit s WST tokenem.") // Log
+                // TODO: Místo celého login procesu zde, zkusit POUZE ověřit token, pokud existuje.
+                // LoginRepository by měla mít metodu pro ověření tokenu.
+                // Prozatím zkusíme celý login proces (který získá nový token, pokud je starý neplatný)
+                val loginResult = repository.login(username, passwordHash) // Použít login metodu z Repository
 
-                println("LoginViewModel: Nalezeny uložené údaje, zkouším auto-login pro $username...")
-
-                _loginState.value = LoginState.Loading // Nastaví stav na načítání
-
-                val result = repository.login(username, password) // Volání přihlašovací metody Repository
-
-                _loginState.value = if (result.isSuccess) {
-                    val token = result.getOrThrow()
-                    println("LoginViewModel: Auto-login pro $username úspěšný.")
-
-                    // Po úspěšném auto-loginu: Získat uživatelská data
-                    loadUserData() // Zavolat metodu pro získání uživatelských dat
-
-                    LoginState.Success(token) // Auto-login úspěšný
+                if (loginResult.isSuccess) {
+                    val token = loginResult.getOrThrow()
+                    // Při úspěchu auto-loginu není potřeba credentials ukládat (už uložené jsou)
+                    println("LoginViewModel: Auto-login úspěšný s tokenem.") // Log
+                    loadUserData() // Načíst uživatelská data
+                    _loginState.postValue(LoginState.Success(token)) // Nastavit stav na úspěch
                 } else {
-                    val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba auto-loginu."
-                    println("LoginViewModel: Auto-login pro $username selhal: $errorMessage")
-                    // Při selhání auto-loginu se vraťte do Idle stavu (zobrazte přihlašovací formulář)
-                    LoginState.Idle // Auto-login selhal
+                    println("LoginViewModel: Auto-login selhal. ${loginResult.exceptionOrNull()?.message}. Mažu credentials a zobrazuji formulář.") // Log
+                    repository.clearCredentials() // Při selhání auto-loginu smazat neplatné credentials
+                    _loginState.postValue(LoginState.Error("Automatické přihlášení selhalo: ${loginResult.exceptionOrNull()?.message}")) // Nastavit stav chyby
+                    // _loginState.postValue(LoginState.Idle) // Možná rovnou přejít do Idle po chybě?
                 }
             } else {
-                println("LoginViewModel: Žádné uložené údaje nenalezeny, zobrazení formuláře.")
-                _loginState.value = LoginState.Idle // Explicitně nastavíme Idle
+                println("LoginViewModel: Žádné uložené credentials nenalezeny, zobrazení formuláře.") // Log
+                // Žádné credentials pro auto-login, přejdeme rovnou do stavu Idle
+                _loginState.postValue(LoginState.Idle) // Nastavit stav na Idle
             }
         }
     }
 
-
-    // Funkce volaná z UI pro manuální přihlášení
+    // --- Metoda pro manuální přihlášení ---
+    // Spustí přihlašovací proces na základě zadaných údajů
+    // **Přijímá navíc rememberMe** pro rozhodnutí o uložení credentials
     fun login(username: String, password: String, rememberMe: Boolean) {
-        // Zabraňte spuštění nového přihlášení, pokud už jedno probíhá
+        println("LoginViewModel: login() volán s username '$username', rememberMe=$rememberMe.") // Log
+        // Zkontrolovat vstupní údaje (prázdné pole atd.)
+        if (username.isEmpty() || password.isEmpty()) {
+            _loginState.value = LoginState.Error("Uživatelské jméno a heslo nesmí být prázdné.") // Nastavit stav chyby
+            println("LoginViewModel: Prázdné údaje.") // Log
+            return
+        }
+
+        // Zkontrolovat, zda již nejsme ve stavu Loading (abychom nespouštěli login vícekrát)
         if (_loginState.value == LoginState.Loading) {
+            println("LoginViewModel: Již probíhá načítání, přeskakuji login.") // Log
             return
         }
 
-        // Základní validace
-        if (username.isBlank() || password.isBlank()) {
-            _loginState.value = LoginState.Error("Prosím, vyplňte uživatelské jméno i heslo.")
-            return
-        }
 
-        _loginState.value = LoginState.Loading // Nastaví stav na načítání
+        _loginState.value = LoginState.Loading // Nastavit stav na načítání
 
         viewModelScope.launch {
-            val result = repository.login(username, password) // Volání přihlašovací metody v Repository
+            println("LoginViewModel: Spouštím manuální login coroutine.") // Log
+            // --- Fáze 1: Získání soli z Repository ---
+            val saltResult = repository.getSalt(username) // Volání getSalt z Repository
 
-            _loginState.value = if (result.isSuccess) {
-                val token = result.getOrThrow()
+            if (saltResult.isFailure) {
+                println("LoginViewModel: Získání soli selhalo: ${saltResult.exceptionOrNull()?.message}") // Log
+                _loginState.postValue(LoginState.Error("Chyba při získání soli: ${saltResult.exceptionOrNull()?.message}"))
+                return@launch // Ukončit coroutine
+            }
 
-                // Po úspěšném manuálním přihlášení: Uložit/smazat údaje dle checkboxu A Získat uživatelská data
+            val salt = saltResult.getOrThrow()
+
+            // --- Fáze 2: Hašování hesla (pomocí Utility třídy, volá se zde, ne v Repository) ---
+            // Hašování probíhá na background vlákně díky viewModelScope.launch, i když Utility nemusí být suspend
+            println("LoginViewModel: Provádím hašování hesla.") // Log
+            val passwordHashResult = HashingUtils.calculateWebsharePasswordHash(password, salt) // Volání Utility
+
+            if (passwordHashResult.isFailure) {
+                println("LoginViewModel: Hašování selhalo: ${passwordHashResult.exceptionOrNull()?.message}") // Log
+                _loginState.postValue(LoginState.Error("Chyba při hašování hesla: ${passwordHashResult.exceptionOrNull()?.message}"))
+                return@launch // Ukončit coroutine
+            }
+
+            val passwordHash = passwordHashResult.getOrThrow()
+
+            // --- Fáze 3: Přihlášení v Repository s hashem hesla ---
+            println("LoginViewModel: Volám Repository.login s hashem hesla.") // Log
+            // repository.login přijímá username a HASH hesla
+            val loginResult = repository.login(username, passwordHash) // Volání login z Repository
+
+            if (loginResult.isSuccess) {
+                val token = loginResult.getOrThrow()
+                println("LoginViewModel: Repository.login úspěšný.") // Log
+
+                // **Fáze 4: Správa lokálních dat na základě rememberMe**
                 if (rememberMe) {
-                    repository.saveCredentials(username, password) // Uloží credentials (apply)
-                    println("LoginViewModel: Uživatel si přál zapamatovat, údaje uloženy.")
+                    // Uživatel si přál být zapamatován - uložit credentials (username + hash)
+                    println("LoginViewModel: Checkbox 'Zapamatovat si mě' byl true. Ukládám credentials...") // Log
+                    repository.saveCredentials(username, passwordHash) // Uložit credentials (s hashem)
                 } else {
-                    repository.clearCredentials() // Smaže credentials (apply)
-                    println("LoginViewModel: Uživatel si nepřál zapamatovat, údaje smazány (pokud existovaly).")
+                    // Uživatel si NEPŘÁL být zapamatován - smazat uložené credentials
+                    println("LoginViewModel: Checkbox 'Zapamatovat si mě' byl false. Mažu credentials...") // Log
+                    repository.clearCredentials() // Smazat credentials
                 }
 
-                // Získat uživatelská data po úspěšném přihlášení
-                loadUserData() // Zavolat metodu pro získání uživatelských dat
+                // **Fáze 5: Načtení uživatelských dat po úspěšném přihlášení**
+                loadUserData() // Načíst uživatelská data (asynchronně)
+                println("LoginViewModel: Načtení uživatelských dat spuštěno.") // Log
 
-                LoginState.Success(token) // Manuální přihlášení úspěšné
+                // **Fáze 6: Nastavení úspěšného stavu**
+                _loginState.postValue(LoginState.Success(token)) // **Nastavit stav na úspěch**
+                println("LoginViewModel: Nastavuji stav LoginState.Success($token).") // Log
+
             } else {
-                val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba přihlášení."
-                println("LoginViewModel: Manuální přihlášení selhalo: $errorMessage")
-                LoginState.Error(errorMessage) // Manuální přihlášení selhalo
+                println("LoginViewModel: Repository.login selhal: ${loginResult.exceptionOrNull()?.message}") // Log
+                // Přihlášení v Repository selhalo (síť, API chyba atd.)
+                _loginState.postValue(LoginState.Error("Přihlášení selhalo: ${loginResult.exceptionOrNull()?.message}")) // Nastavit stav chyby
             }
         }
     }
 
-    // Funkce pro získání uživatelských dat z Repository
-    private fun loadUserData() {
+    // --- Metoda pro načtení uživatelských dat po přihlášení ---
+    // Načte uživatelská data pomocí tokenu z Repository a případně aktualizuje LiveData
+    fun loadUserData() { // Volá se po úspěšném auto-loginu nebo manuálním loginu
+        println("LoginViewModel: loadUserData() volán.") // Log
         viewModelScope.launch {
-            val result = repository.getUserData() // Volání metody Repository
+            val userDataResult = repository.getUserData() // Volání getUserData z Repository
 
-            // Aktualizace LiveData s uživatelskými daty
-            _userData.value = if (result.isSuccess) {
+            if (userDataResult.isSuccess) {
+                val userData = userDataResult.getOrThrow()
+                // Úspěšně načtená uživatelská data
                 println("LoginViewModel: Uživatelská data úspěšně načtena.") // Log
-                result.getOrNull() // Při úspěchu vrátí UserDataResponse objekt nebo null
+                // TODO: Pokud LoginActivity zobrazuje uživatelská data, aktualizovat _userData LiveData zde
+                // _userData.postValue(userData)
             } else {
-                // Při selhání získání uživatelských dat (např. chyba sítě, neplatný token), nastavíme LiveData na null.
-                // Chyba už byla zalogována v Repository nebo zde níže.
-                println("LoginViewModel: Selhalo získání uživatelských dat: ${result.exceptionOrNull()?.message}") // Log chyby
-                null // Nastavíme data na null
+                // Selhání načtení uživatelských dat (např. neplatný token)
+                println("LoginViewModel: Načtení uživatelských dat selhalo: ${userDataResult.exceptionOrNull()?.message}") // Log
+                // Pokud selže načtení uživatelských dat PO úspěšném přihlášení (např. token neplatný hned),
+                // může být potřeba přesměrovat zpět na login. ViewModel by měl signalizovat chybu,
+                // a Activity by měla rozhodnout o přesměrování.
+                // _loginState.postValue(LoginState.Error("Přihlášení úspěšné, ale nelze načíst data: ${userDataResult.exceptionOrNull()?.message}"))
             }
         }
     }
 
-
-    // Funkce pro odhlášení (smaže token a credentials, nastaví stav Idle a smaže user data)
-    fun logout() {
-        viewModelScope.launch {
-            repository.logout() // Zavolá suspend funkci logout v Repository (smaže token a credentials)
-            _loginState.value = LoginState.Idle // Explicitně nastavíme stav na Idle (UI se vrátí na formulář)
-            _userData.value = null // Vymažeme uživatelská data při odhlášení
-            println("LoginViewModel: Uživatel odhlášen, stav nastaven na Idle.") // Log
-        }
-    }
-
-    // TODO: Volitelně: Funkce pro resetování stavu chyby v UI
+    // TODO: Metoda pro odhlášení (pokud je v LoginActivity, ale obvykle bývá v Search/Settings Activity)
+    // Pokud by byla zde, volala by repository.logout(), repository.clearAuthToken(), repository.clearCredentials()
+    // a nastavila _loginState na Idle.
 }

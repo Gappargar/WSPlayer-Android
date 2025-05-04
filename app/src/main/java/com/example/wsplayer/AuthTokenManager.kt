@@ -1,97 +1,79 @@
-package com.example.wsplayer // Váš hlavní balíček
+// app/src/main/java/com/example/wsplayer/AuthTokenManager.kt
+package com.example.wsplayer // Váš balíček - ZKONTROLUJTE
 
-import android.content.Context // Import pro Context
-import android.content.SharedPreferences // Import pro SharedPreferences
-import android.util.Log // Import pro Logování
+import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log // Pro logování
 
-// Volitelně pro EncryptedSharedPreferences (pokud se rozhodnete použít a přidáte závislost)
-// import androidx.security.crypto.EncryptedSharedPreferences
-// import androidx.security.crypto.MasterKeys
-
-
-// Třída pro správu (ukládání/načítání) autentizačního tokenu a přihlašovacích údajů pomocí SharedPreferences
-// Přijímá Context (nejlépe applicationContext) v konstruktoru pro přístup k SharedPreferences
+// Třída pro správu autentizačního tokenu a přihlašovacích údajů uživatele v SharedPreferences
 class AuthTokenManager(context: Context) {
 
-    // Název SharedPreferences souboru
-    private val PREFS_NAME = "WebsharePrefs"
-    // Klíč pro uložení tokenu
-    private val TOKEN_KEY = "auth_token"
-    // Klíče pro uložení přihlašovacích údajů
-    private val USERNAME_KEY = "saved_username"
-    private val PASSWORD_KEY = "saved_password" // **POZOR: Ukládání hesla do SharedPreferences není zcela bezpečné!**
+    // SharedPreferences pro ukládání dat
+    private val prefs: SharedPreferences = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
 
-
-    // Instance SharedPreferences
-    private val sharedPreferences: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    // Klíče pro ukládání dat v SharedPreferences
+    private val PREF_AUTH_TOKEN = "auth_token"
+    private val PREF_USERNAME = "username"
+    private val PREF_PASSWORD = "password" // Ukládáme plain heslo, zvažte šifrování pro produkční app
 
     // --- Správa autentizačního tokenu ---
 
-    // Uloží autentizační token (používá apply - asynchronní)
+    // Uloží autentizační token
     fun saveToken(token: String) {
-        sharedPreferences.edit().putString(TOKEN_KEY, token).apply()
-        Log.d("AuthTokenManager", "Token saved") // Použití Log.d pro logování
+        Log.d("AuthTokenManager", "Saving token") // Log
+        prefs.edit().putString(PREF_AUTH_TOKEN, token).apply()
     }
 
     // Načte autentizační token
     fun getAuthToken(): String? {
-        val token = sharedPreferences.getString(TOKEN_KEY, null)
-        Log.d("AuthTokenManager", "Token retrieved: ${token?.length ?: 0} characters") // Loguje délku, ne celý token
+        val token = prefs.getString(PREF_AUTH_TOKEN, null)
+        Log.d("AuthTokenManager", "Token retrieved: ${if (token != null) "${token.length} characters" else "null"}") // Log
         return token
     }
 
-    // Smaže autentizační token (používá commit - synchronní)
+    // **Smaže autentizační token** - Toto je metoda, kterou volá Repository.clearAuthToken()
     fun clearToken() {
-        sharedPreferences.edit().remove(TOKEN_KEY).commit() // <-- Změněno z .apply() na .commit() pro okamžité smazání
-        Log.d("AuthTokenManager", "Token cleared")
+        Log.d("AuthTokenManager", "Clearing token") // Log
+        prefs.edit().remove(PREF_AUTH_TOKEN).apply()
     }
 
-    // --- Správa přihlašovacích údajů (Credentials) ---
+    // --- Správa přihlašovacích údajů (Username/Password) ---
 
-    // **NOVÁ METODA: Uloží uživatelské jméno a heslo do SharedPreferences** (používá apply - asynchronní)
-    // **POZOR: Zvažte použití EncryptedSharedPreferences nebo jiné formy šifrování pro vyšší bezpečnost!**
+    // Uloží uživatelské jméno a heslo
     fun saveCredentials(username: String, password: String) {
-        sharedPreferences.edit()
-            .putString(USERNAME_KEY, username)
-            .putString(PASSWORD_KEY, password) // **Ukládání hesla - POUŽÍVEJTE S ROZVAHOU!**
-            .apply() // <-- Používáme .apply() pro ukládání (nemusí být okamžité)
-        Log.d("AuthTokenManager", "Credentials saved")
+        Log.d("AuthTokenManager", "Saving credentials") // Log
+        prefs.edit()
+            .putString(PREF_USERNAME, username)
+            .putString(PREF_PASSWORD, password)
+            .apply()
     }
 
-    // **NOVÁ METODA: Načte uložené uživatelské jméno a heslo**
-    // Vrací Pair<username, password> nebo null, pokud nejsou uloženy nebo jsou nekompletní
+    // Načte uložené uživatelské jméno a heslo
+    // Vrací Pair<username, password> nebo null, pokud nejsou údaje kompletní
     fun loadCredentials(): Pair<String, String>? {
-        // Při načítání použijeme get, což je synchronní, přečte aktuálně uložené hodnoty
-        val username = sharedPreferences.getString(USERNAME_KEY, null)
-        val password = sharedPreferences.getString(PASSWORD_KEY, null) // **Načítání hesla**
+        val username = prefs.getString(PREF_USERNAME, null)
+        val password = prefs.getString(PREF_PASSWORD, null)
+        Log.d("AuthTokenManager", "Credentials loaded: username=${username != null}, password=${password != null}") // Log
 
-        // Kontrola, zda jsou oba údaje přítomny a neprázdné
-        return if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
-            Log.d("AuthTokenManager", "Credentials loaded")
+        return if (username != null && password != null) {
             Pair(username, password)
         } else {
-            Log.d("AuthTokenManager", "No credentials found or incomplete")
-            null // V případě chybějících nebo nekompletních údajů vrátíme null
+            null // Credentials nejsou kompletní nebo neexistují
         }
     }
 
-    // **NOVÁ METODA: Smaže uložené přihlašovací údaje** (používá commit - synchronní)
+    // **Smaže uložené uživatelské jméno a heslo**
     fun clearCredentials() {
-        sharedPreferences.edit()
-            .remove(USERNAME_KEY)
-            .remove(PASSWORD_KEY)
-            .apply() // <-- Změněno z .commit() zpět na .apply()
-        Log.d("AuthTokenManager", "Credentials cleared")
+        Log.d("AuthTokenManager", "Clearing credentials") // Log
+        prefs.edit()
+            .remove(PREF_USERNAME)
+            .remove(PREF_PASSWORD)
+            .apply()
     }
 
-    // Volitelně: Zkontrolovat, zda existuje token
-    fun hasToken(): Boolean {
-        return getAuthToken() != null
-    }
-
-    // Volitelně: Zkontrolovat, zda existují uložené credentials
-    fun hasCredentials(): Boolean {
-        return loadCredentials() != null
+    // Pomocná metoda pro smazání VŠECH uložených dat (token i credentials)
+    fun clearAll() {
+        Log.d("AuthTokenManager", "Clearing all authentication data") // Log
+        prefs.edit().clear().apply()
     }
 }
