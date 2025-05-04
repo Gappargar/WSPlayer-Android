@@ -52,7 +52,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
     val isUserLoggedIn: LiveData<Boolean> = _isUserLoggedIn // Activity sleduje tuto LiveData pro rozhodnutí o navigaci
 
 
-    // --- Proměnné pro správu stavu vyhledávání a stránkování ---
+    // --- Proměnné pro správu stavu ---
     private var currentSearchQuery: String = ""
     private var currentSearchCategory: String = ""
     private var currentPage: Int = 0 // Aktuální načtená stránka výsledků
@@ -80,7 +80,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
             // např. načtení posledních souborů nebo info o uživateli.
             if (isLoggedIn) {
                 // TODO: Volitelně spustit prvotní načtení dat po úspěšné kontrole tokenu
-                // např. loadDefaultSearch()
+                // napr. loadDefaultSearch()
                 // loadUserData() // Příklad: načíst info o uživateli hned po startu SearchActivity
             } else {
                 // Pokud token neexistuje při startu SearchViewModelu, Activity se přesměruje observerem
@@ -228,8 +228,8 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         // TODO: Pokud soubor vyžaduje heslo (fileItem.password == 1), zde by se měla spustit logika pro zadání hesla
         if (fileItem.password == 1) {
             println("SearchViewModel: Soubor chráněn heslem - implementace chybí.") // Log
-            // Předpokládáme, že FileLinkState.Error se jmenuje Error
-            _fileLinkState.postValue(FileLinkState.Error("Soubor je chráněn heslem. Podpora zatím není implementována.")) // POZOR: Pokud jste v DataModels.kt použil(a) LinkError, upravte i zde!
+            // Předpokládáme, že FileLinkState.Error se jmenuje Error v DataModels. Pokud LinkError, použijte LinkError
+            _fileLinkState.postValue(FileLinkState.Error("Soubor je chráněn heslem. Podpora zatím není implementována.")) // <- ZKONTROLUJTE NÁZEV STAVU ZDE
             return
         }
 
@@ -249,7 +249,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                 println("SearchViewModel: API volání získání odkazu selhalo.")
                 val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba při získání odkazu"
                 // Předpokládáme, že FileLinkState.Error se jmenuje Error
-                _fileLinkState.postValue(FileLinkState.Error(errorMessage)) // POZOR: Pokud jste v DataModels.kt použil(a) LinkError, upravte i zde!
+                _fileLinkState.postValue(FileLinkState.Error(errorMessage)) // <- ZKONTROLUJTE NÁZEV STAVU ZDE
             }
         }
     }
