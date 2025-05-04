@@ -221,7 +221,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         // **Přidat kontrolu přihlášení před získáním odkazu**
         if (isUserLoggedIn.value != true) {
             println("SearchViewModel: Pokus o získání odkazu bez platného tokenu. Nastavuji Error stav.") // Log
-            _fileLinkState.postValue(FileLinkState.LinkError("Pro získání odkazu je vyžadováno přihlášení.")) // Používá FileLinkState.LinkError
+            _fileLinkState.postValue(FileLinkState.Error("Pro získání odkazu je vyžadováno přihlášení.")) // Používá FileLinkState.LinkError
             return
         }
 
@@ -229,7 +229,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         if (fileItem.password == 1) {
             println("SearchViewModel: Soubor chráněn heslem - implementace chybí.") // Log
             // Předpokládáme, že FileLinkState.Error se jmenuje Error
-            _fileLinkState.postValue(FileLinkState.LinkError("Soubor je chráněn heslem. Podpora zatím není implementována.")) // POZOR: Pokud jste v DataModels.kt použil(a) LinkError, upravte i zde!
+            _fileLinkState.postValue(FileLinkState.Error("Soubor je chráněn heslem. Podpora zatím není implementována.")) // POZOR: Pokud jste v DataModels.kt použil(a) LinkError, upravte i zde!
             return
         }
 
@@ -249,7 +249,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                 println("SearchViewModel: API volání získání odkazu selhalo.")
                 val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba při získání odkazu"
                 // Předpokládáme, že FileLinkState.Error se jmenuje Error
-                _fileLinkState.postValue(FileLinkState.LinkError(errorMessage)) // POZOR: Pokud jste v DataModels.kt použil(a) LinkError, upravte i zde!
+                _fileLinkState.postValue(FileLinkState.Error(errorMessage)) // POZOR: Pokud jste v DataModels.kt použil(a) LinkError, upravte i zde!
             }
         }
     }

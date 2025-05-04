@@ -1,507 +1,378 @@
-package com.example.wsplayer.utils // Váš balíček + .utils
+// app/src/main/java/com/example/wsplayer/utils/XmlUtils.kt
+package com.example.wsplayer.utils // Váš balíček pro utility - ZKONTROLUJTE
 
-import org.xmlpull.v1.XmlPullParserFactory // Import Factory pro vytvoření parseru
-import org.xmlpull.v1.XmlPullParser // Import samotného parseru
-import java.io.StringReader // Import pro čtení stringu jako stream
-import java.text.CharacterIterator // Potřeba pro formátování velikosti
-import java.text.StringCharacterIterator // Import pro formátování velikosti
+import android.util.Log // Pro logování
+import com.example.wsplayer.data.models.* // <-- Důležité: Importujte vaše modelové třídy!
+import org.xmlpull.v1.XmlPullParser // Import pro XmlPullParser
+import org.xmlpull.v1.XmlPullParserException // Import pro XmlPullParserException
+import org.xmlpull.v1.XmlPullParserFactory // Import pro XmlPullParserFactory
+import java.io.IOException // Import pro IOException
+import java.io.StringReader // Import pro StringReader
 
-// Importy datových tříd, které parsing funkce používají
-import com.example.wsplayer.data.models.SaltResponse
-import com.example.wsplayer.data.models.LoginResponse
-import com.example.wsplayer.data.models.FileModel
-import com.example.wsplayer.data.models.SearchResponse
-import com.example.wsplayer.data.models.FileLinkResponse
-import com.example.wsplayer.data.models.UserDataResponse
-
-
-// Objekt pro pomocné funkce pro parsování XML odpovědí z Webshare.cz API
+// Objekt pro parsování XML odpovědí z Webshare.cz API
 object XmlUtils {
 
-    // Funkce pro parsování XML stringu do SaltResponse (/api/salt/)
+    private const val TAG = "XmlUtils" // Logovací tag
+
+    // Pomocná funkce pro přeskočení nepodstatných tagů
+    @Throws(XmlPullParserException::class, IOException::class)
+    private fun skip(parser: XmlPullParser) {
+        if (parser.eventType != XmlPullParser.START_TAG) {
+            throw IllegalStateException()
+        }
+        var depth = 1
+        while (depth != 0) {
+            when (parser.next()) {
+                XmlPullParser.END_TAG -> depth--
+                XmlPullParser.START_TAG -> depth++
+            }
+        }
+    }
+
+    // Pomocná funkce pro získání textu aktuálního tagu
+    @Throws(IOException::class, XmlPullParserException::class)
+    private fun readText(parser: XmlPullParser): String {
+        var result = ""
+        // Ensure we are on a START_TAG before reading text
+        if (parser.eventType == XmlPullParser.START_TAG) {
+            // Advance to the next event, which should be TEXT
+            if (parser.next() == XmlPullParser.TEXT) {
+                result = parser.text
+                // Advance past the TEXT event to the next tag (usually END_TAG for the current element)
+                parser.nextTag()
+            }
+        }
+        return result
+    }
+
+    // Parsuje XML odpověď z /api/salt/
     fun parseSaltResponseXml(xmlString: String): SaltResponse {
-        var status: String? = null
-        var salt: String? = null
-        var code: Int? = null
-        var message: String? = null
-
         try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true // Důležité pro XML se jmennými prostory (i když zde nejsou, dobrá praxe)
-            val xpp = factory.newPullParser() // Vytvoření parseru
+            val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
+            val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
 
-            xpp.setInput(StringReader(xmlString)) // Nastavení vstupu pro parser (XML string)
-            var eventType = xpp.eventType // Získání prvního typu události (START_DOCUMENT)
+            var eventType = parser.eventType
+            var status: String? = null
+            var salt: String? = null
+            var code: Int? = null
+            var message: String? = null
 
-            var currentTag: String? = null // Proměnná pro uchování názvu aktuálního tagu, jehož text čteme
-
-            // Cyklus přes všechny události v XML dokumentu
+            // Najít kořenový tag <response> nebo začít parsovat přímo
             while (eventType != XmlPullParser.END_DOCUMENT) {
-                when (eventType) {
-                    // Když parser narazí na začátek tagu (např. <status>, <salt>)
-                    XmlPullParser.START_TAG -> {
-                        currentTag = xpp.name // Zapamatujeme si název začínajícího tagu
-                    }
-                    // Když parser narazí na text uvnitř tagu
-                    XmlPullParser.TEXT -> {
-                        val text = xpp.text.trim() // Získáme text a odstraníme bílé znaky na začátku/konci
-                        if (text.isNotEmpty()) {
-                            // Pokud text není prázdný, přiřadíme ho příslušné proměnné podle názvu tagu
-                            when (currentTag) {
-                                "status" -> status = text
-                                "salt" -> salt = text
-                                "code" -> code = text.toIntOrNull() // Zkusíme převést text na Int
-                                "message" -> message = text
-                            }
-                        }
-                    }
-                    // Když parser narazí na konec tagu (např. </status>, </salt>)
-                    XmlPullParser.END_TAG -> {
-                        currentTag = null // Resetujeme aktuální tag, přestáváme číst text pro něj
+                if (eventType == XmlPullParser.START_TAG) {
+                    when (parser.name) {
+                        "status" -> status = readText(parser)
+                        "salt" -> salt = readText(parser)
+                        "code" -> code = readText(parser).toIntOrNull() // Pokusit se parsovat na Int
+                        "message" -> message = readText(parser)
                     }
                 }
-                eventType = xpp.next() // Přejít na další událost v XML
+                eventType = parser.next()
             }
+            // Vrací instanci datové třídy SaltResponse
+            return SaltResponse(status ?: "FATAL", salt, code, message)
 
         } catch (e: Exception) {
-            e.printStackTrace() // Vypíše chybu parsování do Logcatu
-            // V případě chyby parsování vrátíme chybovou odpověď
-            println("XmlUtils: Chyba při parsování odpovědi soli: ${e.message}")
-            return SaltResponse("FATAL", null, null, "Chyba při parsování odpovědi soli: ${e.message}")
+            e.printStackTrace()
+            Log.e(TAG, "Chyba při parsování SaltResponse XML: ${e.message}")
+            // V případě chyby parsování vrátit chybový objekt
+            return SaltResponse("FATAL", null, null, "Chyba při parsování XML: ${e.message}")
         }
-
-        // Vrátíme vytvořený objekt SaltResponse na základě shromážděných dat
-        return SaltResponse(
-            status = status ?: "FATAL", // Pokud status chyběl v XML, považujeme to za chybu
-            salt = salt, // Sůl může být null, pokud API vrátilo chybu
-            code = code, // Kód chyby může být null
-            message = message // Zpráva o chybě může být null
-        )
     }
 
-    // Funkce pro parsování XML stringu do LoginResponse (/api/login/)
-    // Stejná logika jako Salt, hledá <status>, <token>, <code>, <message>
+    // Parsuje XML odpověď z /api/login/
     fun parseLoginResponseXml(xmlString: String): LoginResponse {
-        var status: String? = null
-        var token: String? = null
-        var code: Int? = null
-        var message: String? = null
-
         try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val xpp = factory.newPullParser()
+            val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
+            val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
 
-            xpp.setInput(StringReader(xmlString))
-            var eventType = xpp.eventType
-
-            var currentTag: String? = null
+            var eventType = parser.eventType
+            var status: String? = null
+            var token: String? = null
+            var code: Int? = null
+            var message: String? = null
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
-                when (eventType) {
-                    XmlPullParser.START_TAG -> {
-                        currentTag = xpp.name
-                    }
-                    XmlPullParser.TEXT -> {
-                        val text = xpp.text.trim()
-                        if (text.isNotEmpty()) {
-                            when (currentTag) {
-                                "status" -> status = text
-                                "token" -> token = text // Získáváme text z tagu <token>
-                                "code" -> code = text.toIntOrNull()
-                                "message" -> message = text
-                            }
-                        }
-                    }
-                    XmlPullParser.END_TAG -> {
-                        currentTag = null
+                if (eventType == XmlPullParser.START_TAG) {
+                    when (parser.name) {
+                        "status" -> status = readText(parser)
+                        "token" -> token = readText(parser)
+                        "code" -> code = readText(parser).toIntOrNull() // Pokusit se parsovat na Int
+                        "message" -> message = readText(parser)
                     }
                 }
-                eventType = xpp.next()
+                eventType = parser.next()
             }
+            // Vrací instanci datové třídy LoginResponse
+            return LoginResponse(status ?: "FATAL", token, code, message)
 
         } catch (e: Exception) {
             e.printStackTrace()
-            println("XmlUtils: Chyba při parsování odpovědi přihlášení: ${e.message}")
-            return LoginResponse("FATAL", null, null, "Chyba při parsování odpovědi přihlášení: ${e.message}")
+            Log.e(TAG, "Chyba při parsování LoginResponse XML: ${e.message}")
+            // V případě chyby parsování vrátit chybový objekt
+            return LoginResponse("FATAL", null, null, "Chyba při parsování XML: ${e.message}")
         }
-
-        return LoginResponse(
-            status = status ?: "FATAL",
-            token = token, // Token může být null při chybě
-            code = code,
-            message = message
-        )
     }
 
-    // Funkce pro parsování XML stringu do SearchResponse (/api/search/)
-    // Tato funkce je komplexnější kvůli opakujícím se <file> tagům uvnitř <response>
+
+    // Parsuje XML odpověď z /api/logout/
+    // Podle API dokumentace vrací jen status OK/ERROR/FATAL v kořenovém tagu <status>
+    fun parseLogoutResponseXml(xmlString: String): String { // Vrací jen String status
+        try {
+            val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
+            val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
+
+            var eventType = parser.eventType
+            var status: String? = null
+
+            // Najít tag <status>
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG && parser.name == "status") {
+                    status = readText(parser)
+                    break // Status nalezen, končíme
+                }
+                eventType = parser.next()
+            }
+            return status ?: "FATAL" // Vrátí nalezený status nebo FATAL
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e(TAG, "Chyba při parsování LogoutResponse XML: ${e.message}")
+            return "FATAL" // V případě chyby parsování vrátit FATAL
+        }
+    }
+
+
+    // Parsuje XML odpověď z /api/search/
     fun parseSearchResponseXml(xmlString: String): SearchResponse {
+        val filesList = mutableListOf<FileModel>() // Seznam pro ukládání nalezených FileModel
         var status: String? = null
-        var total: Int? = null // Celkový počet souborů
-        val files = mutableListOf<FileModel>() // Seznam pro ukládání nalezených souborů
-        var code: Int? = null // Kód chyby
-        var message: String? = null // Zpráva o chybě
-
-        // Proměnné pro data aktuálního souboru při parsování <file> tagu
-        var currentFileIdent: String? = null
-        var currentFileName: String? = null
-        var currentFileType: String? = null
-        var currentFileImg: String? = null
-        var currentFileStripe: String? = null
-        var currentFileStripeCount: Int? = null
-        var currentFileSize: Long? = null // Velikost v bytech
-        var currentFileQueued: Int? = null
-        var currentFilePositiveVotes: Int? = null
-        var currentFileNegativeVotes: Int? = null
-        var currentFilePassword: Int? = null
-
+        var total: Int? = null
+        var code: Int? = null
+        var message: String? = null
 
         try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val xpp = factory.newPullParser()
+            val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
+            val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
 
-            xpp.setInput(StringReader(xmlString))
-            var eventType = xpp.eventType
-
-            var currentTag: String? = null // Tag, jehož text právě čteme
+            var eventType = parser.eventType
+            var currentFile: FileModel? = null // Pro parsování jednotlivého FileModelu
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
-                        currentTag = xpp.name // Zapamatujeme si název začínajícího tagu
-
-                        // Pokud narazíme na začátek tagu <file>, resetujeme proměnné pro soubor
-                        if (currentTag == "file") {
-                            // Zde začíná nový FileModel
-                            currentFileIdent = null
-                            currentFileName = null
-                            currentFileType = null
-                            currentFileImg = null
-                            currentFileStripe = null
-                            currentFileStripeCount = null
-                            currentFileSize = null
-                            currentFileQueued = null
-                            currentFilePositiveVotes = null
-                            currentFileNegativeVotes = null
-                            currentFilePassword = null
-                        }
-                    }
-                    XmlPullParser.TEXT -> {
-                        val text = xpp.text.trim()
-                        if (text.isNotEmpty()) {
-                            // Při čtení textu tagu ho přiřadíme příslušné proměnné
-                            when (currentTag) {
-                                "status" -> status = text
-                                "total" -> total = text.toIntOrNull() // API dokumentace říká, že total je string, ale očekáváme číslo. Zkusíme převést na Int.
-                                "code" -> code = text.toIntOrNull()
-                                "message" -> message = text
-                                // Pokud jsme uvnitř tagu <file>, přiřazujeme data k proměnným souboru
-                                "ident" -> currentFileIdent = text
-                                "name" -> currentFileName = text
-                                "type" -> currentFileType = text
-                                "img" -> currentFileImg = text
-                                "stripe" -> currentFileStripe = text
-                                "stripe_count" -> currentFileStripeCount = text.toIntOrNull() // Také očekáváme Int
-                                "size" -> {
-                                    // Velikost je vrácena jako string (např. "1.2 GB", "500 MB", nebo jen "1234567")
-                                    // Použijeme pomocnou funkci pro parsování stringu na Long (Byty)
-                                    currentFileSize = parseSizeString(text)
-                                }
-                                "queued" -> currentFileQueued = text.toIntOrNull() // Očekáváme Int (0 nebo 1)
-                                "positive_votes" -> currentFilePositiveVotes = text.toIntOrNull() // Očekáváme Int
-                                "negative_votes" -> currentFileNegativeVotes = text.toIntOrNull() // Očekáváme Int
-                                "password" -> currentFilePassword = text.toIntOrNull() // Očekáváme Int (0 nebo 1)
-                            }
-                        }
-                    }
-                    XmlPullParser.END_TAG -> {
-                        // Při ukončení tagu <file>, vytvoříme objekt FileModel a přidáme ho do seznamu
-                        if (xpp.name == "file") {
-                            // Ujistíme se, že máme alespoň povinná pole (ident, name, type) před vytvořením FileModel
-                            if (currentFileIdent != null && currentFileName != null && currentFileType != null) {
-                                files.add(
-                                    FileModel(
-                                        ident = currentFileIdent!!, // !! = říkáme kompilátoru, že víme, že to není null
-                                        name = currentFileName!!,
-                                        type = currentFileType!!,
-                                        img = currentFileImg,
-                                        stripe = currentFileStripe,
-                                        stripe_count = currentFileStripeCount,
-                                        size = currentFileSize ?: 0L, // Pokud se nepodařilo parsovat velikost, default 0 bytů
-                                        queued = currentFileQueued ?: 0, // Pokud se nepodařilo parsovat, default 0
-                                        positive_votes = currentFilePositiveVotes ?: 0, // Default 0
-                                        negative_votes = currentFileNegativeVotes ?: 0, // Default 0
-                                        password = currentFilePassword ?: 0 // Default 0 (není chráněno heslem)
-                                    )
+                        when (parser.name) {
+                            "status" -> status = readText(parser)
+                            "total" -> total = readText(parser).toIntOrNull()
+                            "code" -> code = readText(parser).toIntOrNull()
+                            "message" -> message = readText(parser)
+                            "file" -> {
+                                // Začátek tagu <file> - připravit pro parsování jednoho FileModelu
+                                currentFile = FileModel( // Inicializovat s výchozími hodnotami
+                                    ident = "", name = "", type = "", img = null,
+                                    stripe = null, stripe_count = null, size = 0L,
+                                    queued = 0, positive_votes = 0, negative_votes = 0,
+                                    password = 0
                                 )
-                            } else {
-                                println("XmlUtils: Nalezen neúplný <file> tag. Ident: $currentFileIdent, Název: $currentFileName, Typ: $currentFileType") // Logovací zpráva pro debug
+                            }
+                            // Vlastnosti uvnitř tagu <file>
+                            "ident" -> currentFile = currentFile?.copy(ident = readText(parser))
+                            "name" -> currentFile = currentFile?.copy(name = readText(parser))
+                            "type" -> currentFile = currentFile?.copy(type = readText(parser))
+                            "img" -> currentFile = currentFile?.copy(img = readText(parser))
+                            "stripe" -> currentFile = currentFile?.copy(stripe = readText(parser))
+                            "stripe_count" -> currentFile = currentFile?.copy(stripe_count = readText(parser).toIntOrNull())
+                            "size" -> currentFile = currentFile?.copy(size = readText(parser).toLongOrNull() ?: 0L)
+                            "queued" -> currentFile = currentFile?.copy(queued = readText(parser).toIntOrNull() ?: 0)
+                            "positive_votes" -> currentFile = currentFile?.copy(positive_votes = readText(parser).toIntOrNull() ?: 0)
+                            "negative_votes" -> currentFile = currentFile?.copy(negative_votes = readText(parser).toIntOrNull() ?: 0)
+                            "password" -> currentFile = currentFile?.copy(password = readText(parser).toIntOrNull() ?: 0)
+                        }
+                    }
+                    XmlPullParser.END_TAG -> {
+                        when (parser.name) {
+                            "file" -> {
+                                // Konec tagu <file> - FileModel je kompletní, přidat do seznamu
+                                if (currentFile != null) {
+                                    filesList.add(currentFile!!) // Přidat non-null FileModel
+                                }
+                                currentFile = null // Reset pro další soubor
                             }
                         }
-                        currentTag = null // Reset aktuálního tagu
                     }
                 }
-                eventType = xpp.next() // Přejít na další událost v XML
+                eventType = parser.next()
             }
+            // Vrací instanci datové třídy SearchResponse
+            return SearchResponse(status ?: "FATAL", total ?: 0, filesList, code, message)
 
         } catch (e: Exception) {
-            e.printStackTrace() // Vypíše chybu parsování do Logcatu
-            // V případě chyby parsování vrátíme chybovou odpověď
-            println("XmlUtils: Chyba při parsování odpovědi vyhledávání: ${e.message}")
-            return SearchResponse(
-                status = "FATAL", // Status je FATAL při chybě parsování
-                total = 0, // Celkový počet 0 při chybě
-                files = null, // Seznam souborů je null při chybě
-                code = null, // Kód chyby nemusí být k dispozici při chybě parsování
-                message = "Chyba při parsování odpovědi vyhledávání: ${e.message}" // Zpráva o chybě parsování
-            )
+            e.printStackTrace()
+            Log.e(TAG, "Chyba při parsování SearchResponse XML: ${e.message}")
+            // V případě chyby parsování vrátit chybový objekt
+            return SearchResponse("FATAL", 0, emptyList(), null, "Chyba při parsování XML: ${e.message}")
         }
-
-        // Vrátíme vytvořený objekt SearchResponse na základě shromážděných dat
-        return SearchResponse(
-            status = status ?: "FATAL", // Pokud status chyběl, FATAL
-            total = total ?: 0, // Pokud total chyběl, default 0
-            files = files, // Vrátíme seznam nalezených souborů (může být prázdný)
-            code = code,
-            message = message
-        )
-    }
-
-    // Pomocná funkce pro parsování velikosti souboru ze stringu na Long (Byty)
-    // Zjednodušeno, zkusí parsovat jako čisté číslo (byty) nebo jako "číslo jednotka".
-    // TODO: Otestovat přesný formát velikosti z API a doladit tuto funkci.
-    private fun parseSizeString(sizeString: String): Long? {
-        val trimmed = sizeString.trim()
-        if (trimmed.isEmpty()) return null
-
-        // Zkusit parsovat jako čisté číslo (byty)
-        val byteValue = trimmed.toLongOrNull()
-        if (byteValue != null) {
-            return byteValue
-        }
-
-        // Zkusit parsovat formát s jednotkami (KB, MB, GB, TB)
-        try {
-            val parts = trimmed.split(" ")
-            if (parts.size == 2) {
-                val value = parts[0].toDoubleOrNull() ?: return null
-                val unit = parts[1].uppercase() // Použijte uppercase pro porovnání
-                val multiplier = when (unit) {
-                    "B" -> 1.0
-                    "KB" -> 1024.0
-                    "MB" -> 1024.0 * 1024
-                    "GB" -> 1024.0 * 1024 * 1024
-                    "TB" -> 1024.0 * 1024 * 1024 * 1024
-                    else -> {
-                        println("XmlUtils: Neznámá jednotka velikosti '$unit' ve stringu '$sizeString'.")
-                        return null // Neznámá jednotka
-                    }
-                }
-                return (value * multiplier).toLong() // Převést na Long
-            }
-        } catch (e: Exception) {
-            println("XmlUtils: Chyba při parsování velikosti '$sizeString' s jednotkami: ${e.message}")
-            // Ignore error, return null
-        }
-
-        println("XmlUtils: Nelze parsovat velikost souboru '$sizeString'.")
-        return null // Nelze parsovat ani jako číslo, ani s jednotkami
     }
 
 
-    // Funkce pro parsování XML stringu do FileLinkResponse (/api/file_link/)
-    // Hledá <status>, <link>, <code>, <message>
+    // Parsuje XML odpověď z /api/file_link/
     fun parseFileLinkResponseXml(xmlString: String): FileLinkResponse {
-        var status: String? = null
-        var link: String? = null // Přímá URL pro přehrávání/stažení
-        var code: Int? = null
-        var message: String? = null
-
         try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val xpp = factory.newPullParser()
-            xpp.setInput(StringReader(xmlString))
-            var eventType = xpp.eventType
-            var currentTag: String? = null
+            val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
+            val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
 
-            while (eventType != XmlPullParser.END_DOCUMENT) {
-                when (eventType) {
-                    XmlPullParser.START_TAG -> currentTag = xpp.name
-                    XmlPullParser.TEXT -> {
-                        val text = xpp.text.trim()
-                        if (text.isNotEmpty()) {
-                            when (currentTag) {
-                                "status" -> status = text
-                                "link" -> link = text
-                                "code" -> code = text.toIntOrNull()
-                                "message" -> message = text
-                            }
-                        }
-                    }
-                    XmlPullParser.END_TAG -> currentTag = null
-                }
-                eventType = xpp.next()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            println("XmlUtils: Chyba při parsování odkazu na soubor: ${e.message}")
-            return FileLinkResponse("FATAL", null, null, "Chyba při parsování odkazu na soubor: ${e.message}")
-        }
-
-        return FileLinkResponse(
-            status = status ?: "FATAL",
-            link = link,
-            code = code,
-            message = message
-        )
-    }
-
-    // Funkce pro parsování XML stringu pro odpověď z /api/logout/
-    // Očekává se <response><status>OK</status></response>
-    fun parseLogoutResponseXml(xmlString: String): String? {
-        var status: String? = null
-
-        try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val xpp = factory.newPullParser()
-            xpp.setInput(StringReader(xmlString))
-            var eventType = xpp.eventType
-            var currentTag: String? = null
-
-            while (eventType != XmlPullParser.END_DOCUMENT) {
-                when (eventType) {
-                    XmlPullParser.START_TAG -> currentTag = xpp.name
-                    XmlPullParser.TEXT -> {
-                        val text = xpp.text.trim()
-                        if (text.isNotEmpty()) {
-                            when (currentTag) {
-                                "status" -> status = text
-                                "code" -> { /* API logout OK doesn't return code here */ }
-                                "message" -> { /* API logout OK doesn't return message here */ }
-                            }
-                        }
-                    }
-                    XmlPullParser.END_TAG -> currentTag = null
-                }
-                eventType = xpp.next()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            println("XmlUtils: Chyba při parsování odpovědi logout: ${e.message}")
-            return "FATAL_PARSE_ERROR"
-        }
-
-        println("XmlUtils: Logout status parsován: $status")
-        return status
-    }
-
-    // **NOVÁ Funkce pro parsování XML stringu do UserDataResponse (/api/user_data/)**
-    fun parseUserDataResponseXml(xmlString: String): UserDataResponse {
-        var status: String? = null
-        var id: String? = null
-        var ident: String? = null
-        var username: String? = null
-        var email: String? = null
-        var points: String? = null
-        var files: String? = null
-        var bytes: String? = null
-        var scoreFiles: String? = null // score_files z API
-        var scoreBytes: String? = null // score_bytes z API
-        var privateFiles: String? = null // private_files z API
-        var privateBytes: String? = null // private_bytes z API
-        var privateSpace: String? = null // private_space z API
-        var tester: String? = null
-        var vip: String? = null
-        var vipDays: String? = null // vip_days z API
-        var vipHours: String? = null // vip_hours z API
-        var vipMinutes: String? = null // vip_minutes z API
-        var vipUntil: String? = null // vip_until z API
-        var emailVerified: String? = null // email_verified z API
-        var code: Int? = null
-        var message: String? = null
-
-
-        try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val xpp = factory.newPullParser()
-
-            xpp.setInput(StringReader(xmlString))
-            var eventType = xpp.eventType
-
-            var currentTag: String? = null
+            var eventType = parser.eventType
+            var status: String? = null
+            var link: String? = null
+            var code: Int? = null
+            var message: String? = null
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
-                        currentTag = xpp.name
-                    }
-                    XmlPullParser.TEXT -> {
-                        val text = xpp.text.trim()
-                        if (text.isNotEmpty()) {
-                            when (currentTag) {
-                                "status" -> status = text
-                                "id" -> id = text
-                                "ident" -> ident = text
-                                "username" -> username = text
-                                "email" -> email = text
-                                "points" -> points = text
-                                "files" -> files = text
-                                "bytes" -> bytes = text
-                                "score_files" -> scoreFiles = text // Mapování z XML tagu na proměnnou
-                                "score_bytes" -> scoreBytes = text // Mapování z XML tagu na proměnnou
-                                "private_files" -> privateFiles = text // Mapování z XML tagu na proměnnou
-                                "private_bytes" -> privateBytes = text // Mapování z XML tagu na proměnnou
-                                "private_space" -> privateSpace = text // Mapování z XML tagu na proměnnou
-                                "tester" -> tester = text
-                                "vip" -> vip = text
-                                "vip_days" -> vipDays = text // Mapování z XML tagu na proměnnou
-                                "vip_hours" -> vipHours = text // Mapování z XML tagu na proměnnou
-                                "vip_minutes" -> vipMinutes = text // Mapování z XML tagu na proměnnou
-                                "vip_until" -> vipUntil = text // Mapování z XML tagu na proměnnou
-                                "email_verified" -> emailVerified = text // Mapování z XML tagu na proměnnou
-                                "code" -> code = text.toIntOrNull()
-                                "message" -> message = text
-                            }
+                        when (parser.name) {
+                            "status" -> status = readText(parser)
+                            "link" -> link = readText(parser)
+                            "code" -> code = readText(parser).toIntOrNull()
+                            "message" -> message = readText(parser)
                         }
                     }
-                    XmlPullParser.END_TAG -> {
-                        currentTag = null
-                    }
                 }
-                eventType = xpp.next()
+                eventType = parser.next()
             }
+            // Vrací instanci datové třídy FileLinkResponse
+            return FileLinkResponse(status ?: "FATAL", link, code, message)
 
         } catch (e: Exception) {
             e.printStackTrace()
-            println("XmlUtils: Chyba při parsování uživatelských dat: ${e.message}")
-            return UserDataResponse(
-                status = "FATAL", // Status je FATAL při chybě parsování
-                id = null, ident = null, username = null, email = null,
-                points = null, files = null, bytes = null,
-                score_files = null, score_bytes = null,
-                private_files = null, private_bytes = null, private_space = null,
-                tester = null, vip = null, vip_days = null, vip_hours = null, vip_minutes = null, vip_until = null, email_verified = null,
-                code = null, message = "Chyba při parsování uživatelských dat: ${e.message}"
-            )
+            Log.e(TAG, "Chyba při parsování FileLinkResponse XML: ${e.message}")
+            // V případě chyby parsování vrátit chybový objekt
+            return FileLinkResponse("FATAL", null, null, "Chyba při parsování XML: ${e.message}")
         }
-
-        // Vrátíme vytvořený objekt UserDataResponse na základě shromážděných dat
-        return UserDataResponse(
-            status = status ?: "FATAL", // Pokud status chyběl, FATAL
-            id = id, ident = ident, username = username, email = email,
-            points = points, files = files, bytes = bytes,
-            score_files = scoreFiles, score_bytes = scoreBytes,
-            private_files = privateFiles, private_bytes = privateBytes, private_space = privateSpace,
-            tester = tester, vip = vip, vip_days = vipDays, vip_hours = vipHours, vip_minutes = vipMinutes, vip_until = vipUntil, email_verified = emailVerified,
-            code = code,
-            message = message
-        )
     }
 
-    // TODO: Implementujte další parsing funkce
+
+    // Parsuje XML odpověď z /api/user_data/
+    fun parseUserDataResponseXml(xmlString: String): UserDataResponse {
+        // TODO: Implementujte robustní parsovací logiku XML pro UserDataResponse
+        // Zkontrolujte, jak se jmenují tagy v XML odpovědi z API a extrahujte hodnoty.
+        // Názvy tagů se MUSÍ shodovat s těmi v XML.
+        try {
+            val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
+            val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
+
+            var eventType = parser.eventType
+
+            var status: String? = null
+            var id: String? = null
+            var ident: String? = null
+            var username: String? = null
+            var email: String? = null
+            var points: String? = null
+            var files: String? = null
+            var bytes: String? = null
+            var score_files: String? = null
+            var score_bytes: String? = null
+            var private_files: String? = null
+            var private_bytes: String? = null
+            var private_space: String? = null // Název pole v DataModels.kt a tag v XML?
+            var tester: String? = null
+            var vip: String? = null
+            var vip_days: String? = null
+            var vip_hours: String? = null
+            var vip_minutes: String? = null
+            var vip_until: String? = null
+            var email_verified: String? = null
+            var code: Int? = null
+            var message: String? = null
+
+
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                when (eventType) {
+                    XmlPullParser.START_TAG -> {
+                        when (parser.name) { // Název tagu v XML
+                            "status" -> status = readText(parser)
+                            "id" -> id = readText(parser)
+                            "ident" -> ident = readText(parser)
+                            "username" -> username = readText(parser)
+                            "email" -> email = readText(parser)
+                            "points" -> points = readText(parser)
+                            "files" -> files = readText(parser)
+                            "bytes" -> bytes = readText(parser)
+                            "score_files" -> score_files = readText(parser)
+                            "score_bytes" -> score_bytes = readText(parser)
+                            "private_files" -> private_files = readText(parser)
+                            "private_bytes" -> private_bytes = readText(parser)
+                            "private_space" -> private_space = readText(parser) // Název tagu v XML?
+                            "tester" -> tester = readText(parser)
+                            "vip" -> vip = readText(parser)
+                            "vip_days" -> vip_days = readText(parser)
+                            "vip_hours" -> vip_hours = readText(parser)
+                            "vip_minutes" -> vip_minutes = readText(parser)
+                            "vip_until" -> vip_until = readText(parser)
+                            "email_verified" -> email_verified = readText(parser)
+                            "code" -> code = readText(parser).toIntOrNull()
+                            "message" -> message = readText(parser)
+                            // Přeskočit neznámé tagy uvnitř response, pokud existují
+                            else -> skip(parser) // Přeskočí celý podstrom neznámého tagu
+                        }
+                    }
+                }
+                eventType = parser.next()
+            }
+            // Volání konstruktoru s extrahovanými hodnotami
+            return UserDataResponse(
+                status = status ?: "FATAL",
+                id = id,
+                ident = ident,
+                username = username,
+                email = email,
+                points = points,
+                files = files,
+                bytes = bytes,
+                score_files = score_files,
+                score_bytes = score_bytes,
+                private_files = private_files,
+                private_bytes = private_bytes,
+                private_space = private_space, // Předat správnou hodnotu
+                tester = tester,
+                vip = vip,
+                vip_days = vip_days,
+                vip_hours = vip_hours,
+                vip_minutes = vip_minutes,
+                vip_until = vip_until,
+                email_verified = email_verified,
+                code = code,
+                message = message
+            )
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e(TAG, "Chyba při parsování UserDataResponse XML: ${e.message}")
+            // V případě chyby parsování vrátit chybový objekt
+            return UserDataResponse(
+                status = "FATAL", // Status chyby
+                id = null, ident = null, username = null, email = null, points = null,
+                files = null, bytes = null, score_files = null, score_bytes = null,
+                private_files = null, private_bytes = null, private_space = null,
+                tester = null, vip = null, vip_days = null, vip_hours = null,
+                vip_minutes = null, vip_until = null, email_verified = null,
+                code = null, message = "Chyba při parsování XML: ${e.message}"
+            )
+        }
+    }
+
+
+    // TODO: Implementovat metodu pro parsování odpovědi z /api/file_password_salt/
+    /*
+    fun parseFilePasswordSaltResponseXml(xmlString: String): FilePasswordSaltResponse {
+        // ... parsovací logika ...
+         return FilePasswordSaltResponse("FATAL", null, null, "Není implementováno") // Placeholder
+    }
+    */
+
 }
+
+// Potřebujeme import pro XmlPullParserException, která je v jiném paketu
+// import org.xmlpull.v1.XmlPullParserException
+// Přidáno na začátek souboru.

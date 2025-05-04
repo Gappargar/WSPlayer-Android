@@ -50,6 +50,8 @@ class MainActivity : AppCompatActivity() {
         println("MainActivity: >>> onCreate spuštěn. PID: ${android.os.Process.myPid()}") // Log
 
         // --- Nastavení uživatelského rozhraní pomocí View Bindingu ---
+        // Předpokládá, že máte activity_main.xml a v něm povolený View Binding
+        // import com.example.wsplayer.databinding.ActivityMainBinding se provede automaticky
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root) // Použití binding.root
         println("MainActivity: ContentView nastaven.")
@@ -198,6 +200,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         println("MainActivity: >>> onDestroy spuštěn.") // Log
         // Zde můžete uvolnit zdroje, které byly alokovány specificky pro tuto Activity
+        // např. zrušit registraci BroadcastReceiverů, pokud nějaké máte
         super.onDestroy()
         println("MainActivity: <<< onDestroy dokončen.") // Log
     }

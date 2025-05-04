@@ -1,86 +1,107 @@
-package com.example.wsplayer.ui.settings // Váš balíček + .ui.settings
+// app/src/main/java/com/example/wsplayer/ui/settings/SettingsActivity.kt
+package com.example.wsplayer.ui.settings // Váš balíček pro SettingsActivity - ZKONTROLUJTE
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.View // Import pro View (pokud se používá)
-import android.widget.Toast // Import pro Toast (pokud se používá)
-import androidx.appcompat.app.AppCompatActivity // Základní třída Activity
-import androidx.lifecycle.Observer // Import Observeru pro LiveData
-import androidx.lifecycle.ViewModelProvider // Import ViewModelProvider
+import android.view.View
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
+import com.example.wsplayer.data.api.WebshareApiService
+// Import pro MainActivity (pro přesměrování zpět) (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.MainActivity
+import com.example.wsplayer.R // Import pro string resources
+// Importy pro ViewModel a Factory (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.ui.search.SearchViewModel // ViewModel se logout logikou
+import com.example.wsplayer.ui.search.SearchViewModelFactory // Factory pro SearchViewModel
+// Import pro View Binding (vygenerovaná třída) (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.databinding.ActivitySettingsBinding
 
-// Importy pro získání LoginViewModelu
-import com.example.wsplayer.ui.auth.LoginViewModel
-import com.example.wsplayer.ui.auth.LoginViewModelFactory
-
-import com.example.wsplayer.databinding.ActivitySettingsBinding // Import Binding třídy pro activity_settings.xml
-import com.example.wsplayer.MainActivity // Import pro MainActivity (není potřeba pro spuštění Intentu odsud v nové strategii)
-
-
-// Importy pro Repository a ApiService (pro Factory) - pokud je SettingsActivity Factory jinde než v ui.settings
-// import com.example.wsplayer.data.api.WebshareApiService
-// import com.example.wsplayer.data.repository.WebshareRepository
-// import com.example.wsplayer.AuthTokenManager
-
-
-// Activity pro zobrazení nastavení
+// Activity pro obrazovku nastavení
+// Obsahuje tlačítko pro odhlášení
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
-    // **PROMĚNNÁ PRO LoginViewModel**
-    private lateinit var loginViewModel: LoginViewModel
-
+    // Použijeme SearchViewModel, protože už má implementovanou logout logiku a isUserLoggedIn LiveData
+    private lateinit var viewModel: SearchViewModel // Toto je SearchViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        println("SettingsActivity: >>> onCreate spuštěn. PID: ${android.os.Process.myPid()}") // Log
 
         // --- Nastavení UI pomocí View Bindingu ---
+        // Předpokládá, že máte activity_settings.xml a v něm povolený View Binding
         binding = ActivitySettingsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(binding.root) // Použití binding.root
+        println("SettingsActivity: ContentView nastaven.")
 
-        // Nastavení nadpisu ActionBaru (volitelné)
-        supportActionBar?.title = "Nastavení"
+        // --- Inicializace ViewModelu (použijeme SearchViewModel) ---
+        // SearchViewModelFactory potřebuje Context a ApiService pro vytvoření Repository uvnitř
+        // Zkontrolujte, zda máte tyto dependency pro Factory, nebo SearchViewModelFactory upravte
+        // aby je přijímala (jak je v kódu SearchViewModelFactory, který jsem poslal(a)).
+        // Předpokládáme, že ApiService, AuthTokenManager a Repository jsou dostupné/vytvořené
+        // pro SearchViewModelFactory.
+        // Pokud vaše Factory pro SearchViewModel potřebuje jiné parametry, upravte volání níže.
 
-        // --- Inicializace ViewModelu ---
-        val apiService = com.example.wsplayer.data.api.WebshareApiService.create()
-        loginViewModel = ViewModelProvider(this, LoginViewModelFactory(applicationContext, apiService))
-            .get(LoginViewModel::class.java)
+        // Získání závislostí pro Factory (pokud je potřeba pro vaši SearchViewModelFactory)
+        // val apiService = WebshareApiService.create() // Pokud Factory potřebuje ApiService
+        // val authTokenManager = AuthTokenManager(applicationContext) // Pokud Factory potřebuje AuthTokenManager
+        // val repository = WebshareRepository(apiService, authTokenManager) // Pokud Factory potřebuje Repository
+
+        // **Získání instance SearchViewModelu pomocí Factory**
+        // Použijte stejnou Factory jako SearchActivity.
+        // Předpokládáme, že SearchViewModelFactory přijímá Context a ApiService a vytváří Repository.
+        val apiService = WebshareApiService.create() // Zkontrolujte cestu k ApiService
+        val viewModelFactory = SearchViewModelFactory(applicationContext, apiService) // Zkontrolujte cestu k Factory
+        viewModel = ViewModelProvider(this, viewModelFactory).get(SearchViewModel::class.java) // Získání SearchViewModelu
+        println("SettingsActivity: ViewModel (SearchViewModel) získán.")
 
 
-        // **Nastavení posluchače na tlačítko Odhlásit se**
-        binding.buttonLogout.setOnClickListener { // <- Zde se nastavuje posluchač
-            println("SettingsActivity: Kliknuto na Odhlásit se.") // Log
+        // --- Sledování stavu přihlášení z ViewModelu ---
+        // Toto zajistí přesměrování na login obrazovku, pokud se uživatel odhlásí
+        println("SettingsActivity: Nastavuji Observer pro viewModel.isUserLoggedIn.") // Log
+        viewModel.isUserLoggedIn.observe(this) { isLoggedIn ->
+            println("SettingsActivity: Observer isUserLoggedIn spuštěn. isUserLoggedIn: $isLoggedIn") // Log stavu
+            if (!isLoggedIn) { // Pokud ViewModel signalizuje, že uživatel NENÍ přihlášen (token byl smazán)
+                println("SettingsActivity: isUserLoggedIn je false. Přesměrovávám na LoginActivity.")
+                // Přesměrovat zpět na LoginActivity a vymazat Task Stack
+                val intent = Intent(this, MainActivity::class.java) // Intent pro MainActivity (ZKONTROLUJTE CESTU)
+                // Tyto flags zajistí, že se LoginActivity stane novým kořenem Tasku
+                // a SettingsActivity (a vše ostatní v jejím Tasku) bude ukončeno.
+                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
+                finish() // **Ukončit SettingsActivity**
+                println("SettingsActivity: finish() voláno po přesměrování na LoginActivity.")
+            } else {
+                // Uživatel je přihlášen (má token) - nic nedělat, zůstat na SettingsActivity
+                println("SettingsActivity: isUserLoggedIn je true (token nalezen). Zůstávám na SettingsActivity.")
+            }
+        }
+        println("SettingsActivity: Observer isUserLoggedIn nastaven.")
 
-            // Zavolá ViewModel metodu pro odhlášení (ta smaže token/credentials lokálně a zavolá API)
-            loginViewModel.logout()
 
-            // **Expliciní ukončení SettingsActivity**
-            finish() // <-- EXPLICITNÍ UKONČENÍ TÉTO ACTIVITY
-
-            // **Spuštění MainActivity (přihlašovací obrazovky) s VLAKAMI PRO NOVÝ, VYČIŠTĚNÝ ZÁSOBNÍK**
-            // Toto by se mělo spustit AŽ po pokusu o ukončení SettingsActivity
-            val intent = Intent(this, MainActivity::class.java) // Intent pro MainActivity
-            // Vlajky: NEW_TASK spustí MainActivity v novém zásobníku, CLEAR_TASK ukončí všechny aktivity ve starém zásobníku (SearchActivity, SettingsActivity)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK // <- Tyto vlajky
-
-            startActivity(intent) // Spustí MainActivity
-
-            // Observer níže na LoginState.Idle v této aktivitě už nebude potřeba pro volání finish(),
-            // protože finish() voláme explicitně zde. Můžete ho odstranit nebo ponechat pro debug.
+        // --- Nastavení listeneru na tlačítko Odhlásit se ---
+        // Předpokládá, že máte v activity_settings.xml tlačítko s ID např. @+id/buttonLogout
+        println("SettingsActivity: Nastavuji OnClickListener pro tlačítko Odhlásit.") // Log
+        binding.buttonLogout.setOnClickListener { // **Zkontrolujte ID tlačítka v activity_settings.xml**
+            println("SettingsActivity: Kliknuto na tlačítko Odhlásit.") // Log
+            // **Volání metody logout ve ViewModelu**
+            viewModel.logout() // <- Volání metody logout na SearchViewModelu
+            println("SettingsActivity: Voláno viewModel.logout().") // Log
+            // Observer výše se postará o přesměrování po dokončení logoutu ve ViewModelu.
         }
 
-        // **Observer pro stav přihlášení z LoginViewModelu - pro samo-ukončení při odhlášení (ZDE UŽ NENÍ POTŘEBA SPUSŤOVAT INTENT)**
-        // Tento observer v SettingsActivity nyní primárně jen loguje, protože finish() voláme explicitně výše.
-        // Ale ponecháme ho pro konzistenci.
-        loginViewModel.loginState.observe(this, Observer { state ->
-            if (state is LoginViewModel.LoginState.Idle) { // Pokud je stav Idle (což signalizuje logout)
-                println("SettingsActivity: LoginState je Idle (z observeru).") // Log
-                // finish() // Tady už nevoláme finish() ani Intent, voláme finish() a Intent výše v posluchači kliknutí
-            }
-        })
-
-
-        // TODO: Nastavit posluchače pro další prvky nastavení
+        // TODO: Přidejte další UI prvky a logiku pro nastavení zde...
     }
 
-    // TODO: Zvážit, zda je potřeba přepsat onResume, onPause, onDestroy
+    override fun onDestroy() {
+        println("SettingsActivity: >>> onDestroy spuštěn.") // Log
+        // Uvolněte zdroje specifické pro SettingsActivity, pokud nějaké máte
+        super.onDestroy()
+        println("SettingsActivity: <<< onDestroy dokončen.") // Log
+    }
+
+    // TODO: SettingsActivity potřebuje svůj vlastní layout activity_settings.xml
+    // který obsahuje UI prvky jako je tlačítko Odhlásit se (s odpovídajícím ID buttonLogout).
 }
