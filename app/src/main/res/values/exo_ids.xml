@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="id" name="exo_play" />
+    <item type="id" name="exo_pause" />
+    <item type="id" name="exo_rew" />
+    <item type="id" name="exo_ffwd" />
+    <item type="id" name="exo_prev" />
+    <item type="id" name="exo_next" />
+    <item type="id" name="exo_position" />
+    <item type="id" name="exo_duration" />
+    <item type="id" name="exo_progress" />
+    <item type="id" name="exo_fullscreen_button" />
+    <item type="id" name="exo_fullscreen_icon" />
+</resources>

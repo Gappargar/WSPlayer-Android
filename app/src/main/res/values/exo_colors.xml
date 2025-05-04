@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    {# Barvy používané standardními ovládacími prvky ExoPlayeru #}
+    {# Tyto by měly být poskytovány knihovnou exoplayer-ui #}
+    {# Pokud je build systém nenachází, definujeme je zde #}
+
+    <color name="exo_icon_color">#FFBEBEBE</color> {# Světle šedá #}
+
+    {# TODO: Pokud se objeví chyby týkající se jiných barev ExoPlayeru #}
+
+</resources>

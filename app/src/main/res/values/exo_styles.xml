@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ExoStyledControls.Button">
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:layout_width">@dimen/exo_custom_controls_icon_size</item> {# Odkaz na dimenzi #}
+        <item name="android:layout_height">@dimen/exo_custom_controls_icon_size</item> {# Odkaz na dimenzi #}
+        <item name="android:tint">@color/exo_icon_color</item> {# Odkaz na barvu #}
+    </style>
+
+    <style name="ExoStyledControls.Button.Rewind" parent="ExoStyledControls.Button">
+        <item name="android:src">@drawable/exo_styled_controls_rewind</item> {# Odkaz na drawable #}
+        <item name="android:contentDescription">@string/exo_controls_rewind_description</item> {# Odkaz na string #}
+    </style>
+
+    <style name="ExoStyledControls.Button.FastForward" parent="ExoStyledControls.Button">
+        <item name="android:src">@drawable/exo_styled_controls_fastforward</item> {# Odkaz na drawable #}
+        <item name="android:contentDescription">@string/exo_controls_fastforward_description</item> {# Odkaz na string #}
+    </style>
+
+    <style name="ExoStyledControls.Button.Play" parent="ExoStyledControls.Button">
+        <item name="android:src">@drawable/exo_styled_controls_play</item> {# Odkaz na drawable #}
+        <item name="android:contentDescription">@string/exo_controls_play_description</item> {# Odkaz na string #}
+    </style>
+
+    <style name="ExoStyledControls.Button.Pause" parent="ExoStyledControls.Button">
+        <item name="android:src">@drawable/exo_styled_controls_pause</item> {# Odkaz na drawable #}
+        <item name="android:contentDescription">@string/exo_controls_pause_description</item> {# Odkaz na string #}
+    </style>
+
+    <style name="ExoStyledControls.Button.Previous" parent="ExoStyledControls.Button">
+        <item name="android:src">@drawable/exo_styled_controls_previous</item> {# Odkaz na drawable #}
+        <item name="android:contentDescription">@string/exo_controls_previous_description</item> {# Odkaz na string #}
+    </style>
+
+    <style name="ExoStyledControls.Button.Next" parent="ExoStyledControls.Button">
+        <item name="android:src">@drawable/exo_styled_controls_next</item> {# Odkaz na drawable #}
+        <item name="android:contentDescription">@string/exo_controls_next_description</item> {# Odkaz na string #}
+    </style>
+</resources>

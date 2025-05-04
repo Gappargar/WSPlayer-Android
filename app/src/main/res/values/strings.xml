@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WSPlayer</string>
+    <string name="login_success_toast">Přihlášení úspěšné!</string>
+    <string name="login_error_message">Chyba: %s</string>
+    <string name="login_error_toast">Chyba přihlášení: %s</string>
+
+    {# String array pro kategorie vyhledávání #}
+    <string-array name="search_categories_array">
+        <item>Vše</item>
+        <item>Video</item>
+        <item>Audio</item>
+        <item>Obrázky</item>
+        <item>Dokumenty</item>
+        <item>Archivy</item>
+    </string-array>
+
+    {# Odpovídající API hodnoty pro kategorie v pořadí jako v array #}
+    <string-array name="search_categories_api_values">
+        <item></item>
+        {# Prázdné pro 'Vše' #}
+        <item>video</item>
+        <item>audio</item>
+        <item>images</item>
+        <item>docs</item>
+        <item>archives</item>
+    </string-array>
+
+    {# TODO: Přidat další stringové zdroje, které budete potřebovat (např. pro názvy obrazovek,
+    zprávy uživateli atd.) #}
+    {# Příklad: <string name="title_activity_search">Vyhledávání</string> #}
+
+</resources>

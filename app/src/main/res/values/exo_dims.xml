@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    {# Dimenze používané standardními ovládacími prvky ExoPlayeru #}
+    {# Tyto by měly být poskytovány knihovnou exoplayer-ui #}
+    {# Pokud je build systém nenachází, definujeme je zde #}
+
+    <dimen name="exo_custom_controls_icon_size">56dp</dimen> {# Příklad hodnoty, může se lišit dle verze ExoPlayeru #}
+    {# Standardní hodnota je obvykle 48dp nebo 56dp #}
+
+    {# TODO: Pokud se objeví chyby týkající se jiných dimenzí ExoPlayeru #}
+
+</resources>

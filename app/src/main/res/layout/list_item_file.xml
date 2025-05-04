@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/imageViewThumbnail"
+        android:layout_width="80dp"
+        android:layout_height="45dp"
+        android:scaleType="centerCrop"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:background="@android:color/darker_gray"
+        tools:ignore="ContentDescription" />
+
+    <ImageView
+        android:id="@+id/imageViewFileTypeIcon"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="4dp"
+        app:layout_constraintTop_toTopOf="@+id/textViewFileType"
+        app:layout_constraintStart_toEndOf="@+id/textViewFileType"
+        tools:src="@drawable/ic_file_video"
+        tools:ignore="ContentDescription" />
+
+
+    <ImageView
+        android:id="@+id/imageViewPasswordIcon"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginEnd="4dp"
+        app:layout_constraintTop_toTopOf="@+id/textViewRating"
+        app:layout_constraintBottom_toBottomOf="@+id/textViewRating"
+        app:layout_constraintEnd_toStartOf="@+id/textViewRating"
+        tools:src="@drawable/ic_file_password"
+        android:visibility="gone"
+        tools:ignore="ContentDescription" />
+
+
+    <TextView
+        android:id="@+id/textViewFileName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        app:layout_constraintTop_toTopOf="@+id/imageViewThumbnail"
+        app:layout_constraintStart_toEndOf="@+id/imageViewThumbnail"
+        app:layout_constraintEnd_toStartOf="@+id/textViewFileSize"
+        tools:text="Název souboru zde.mp4" />
+
+    <TextView
+        android:id="@+id/textViewFileSize"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        app:layout_constraintTop_toTopOf="@+id/textViewFileName"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/textViewFileName"
+        app:layout_constraintHorizontal_bias="1.0"
+        tools:text="1.2 GB" />
+
+    <TextView
+        android:id="@+id/textViewFileType"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@+id/textViewFileName"
+        app:layout_constraintStart_toStartOf="@+id/textViewFileName"
+        android:textSize="12sp"
+        tools:text="video" />
+
+    <TextView
+        android:id="@+id/textViewRating"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="8dp"
+    app:layout_constraintTop_toBottomOf="@+id/textViewFileType"
+    app:layout_constraintEnd_toEndOf="parent"
+    android:textSize="12sp"
+    tools:text="+10 / -2" />
+
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>
