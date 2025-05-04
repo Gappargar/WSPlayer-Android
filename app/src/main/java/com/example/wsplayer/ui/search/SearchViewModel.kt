@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope // Pro práci s coroutines ve ViewModelu
 
 // **Import Repository**
-import com.example.wsplayer.data.repository.WebshareRepository
+import com.example.wsplayer.data.repository.WebshareRepository // ZKONTROLUJTE CESTU
 
 // **Importy pro datové třídy a sealed classy pro stavy z vašeho data.models balíčku**
 // ZKONTROLUJTE, že cesta odpovídá vašemu umístění DataModels.kt

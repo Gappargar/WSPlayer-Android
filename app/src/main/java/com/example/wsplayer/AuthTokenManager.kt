@@ -33,7 +33,7 @@ class AuthTokenManager(context: Context) {
         return token
     }
 
-    // **Smaže autentizační token** - Volá se z Repository
+    // Smaže autentizační token
     fun clearToken() {
         Log.d(TAG, "Clearing token")
         prefs.edit().remove(PREF_AUTH_TOKEN).apply()
@@ -64,7 +64,7 @@ class AuthTokenManager(context: Context) {
         }
     }
 
-    // **Smaže uložené uživatelské jméno a heslo** - Volá se z Repository
+    // Smaže uložené uživatelské jméno a heslo
     fun clearCredentials() {
         Log.d(TAG, "Clearing credentials")
         prefs.edit()

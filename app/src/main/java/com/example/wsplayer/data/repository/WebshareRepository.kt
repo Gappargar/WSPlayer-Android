@@ -4,22 +4,27 @@ package com.example.wsplayer.data.repository // Váš balíček - ZKONTROLUJTE
 import android.os.Build // Potřeba pro Build info (pokud se používá v getFileLink)
 import android.util.Log // Logování
 
-import com.example.wsplayer.data.api.WebshareApiService // Import Retrofit API rozhraní
+import com.example.wsplayer.data.api.WebshareApiService // Import Retrofit API rozhraní (ZKONTROLUJTE CESTU)
 // **Importujte vaše modelové třídy z vašeho data.models balíčku**
 // ZKONTROLUJTE, že cesta odpovídá vašemu umístění DataModels.kt
 import com.example.wsplayer.data.models.* // Import datových tříd (* import pro všechny třídy v models)
 
 import com.example.wsplayer.utils.HashingUtils // Import utility pro hašování (používá se ve login/getSalt metodách ViewModelu)
-import com.example.wsplayer.utils.XmlUtils // Import utility pro parsování XML
+import com.example.wsplayer.utils.XmlUtils // Import utility pro parsování XML (ZKONTROLUJTE CESTU)
+
 import kotlinx.coroutines.Dispatchers // Pro background vlákna
 import kotlinx.coroutines.withContext // Pro přepnutí kontextu
+
 import retrofit2.Response // <-- Import pro Retrofit Response
 import kotlin.Result // Import třídy Result
-import com.example.wsplayer.AuthTokenManager // Import AuthTokenManager
+import com.example.wsplayer.AuthTokenManager // Import AuthTokenManager (ZKONTROLUJTE CESTU)
+
+import kotlin.Pair // Import třídy Pair, pokud není implicitní
+
+
 // Repository pro komunikaci s Webshare.cz API
 // Slouží jako jediný zdroj dat pro ViewModely.
 // Zapouzdřuje logiku volání API, zpracování dat a správu lokálního stavu přes AuthTokenManager.
-
 class WebshareRepository(
     private val apiService: WebshareApiService, // Přijímá instanci API služby
     private val authTokenManager: AuthTokenManager // Přijímá instanci AuthTokenManageru
@@ -36,10 +41,10 @@ class WebshareRepository(
         Log.d(TAG, "Token uložen pomocí AuthTokenManageru.")
     }
 
-    // Načte autentizační token (volá se ve ViewModelech k ověření přihlášení)
+    // Načte autentizační token (volá se ve ViewMelech k ověření přihlášení)
     fun getAuthToken(): String? {
         Log.d(TAG, "Získávám token z AuthTokenManageru...")
-        return authTokenManager.getAuthToken() // Deleguje na AuthTokenManager
+        return authTokenManager.getAuthToken()
     }
 
     // **Smaže autentizační token** (PUBLIC metoda pro ViewModels jako součást logoutu nebo při chybě tokenu)
@@ -66,6 +71,78 @@ class WebshareRepository(
         authTokenManager.clearCredentials() // Deleguje
     }
 
+    suspend fun getUserData(): Result<UserDataResponse> { // Vrací UserDataResponse
+        Log.d(TAG, "getUserData() volán.") // Log na začátku metody
+
+        return withContext(Dispatchers.IO) { // Spustit v background vlákně
+            val token = getAuthToken() // Získáme WST token ze SharedPreferences
+            if (token.isNullOrEmpty()) {
+                Log.e(TAG, "Získání uživatelských dat selhalo, uživatel není přihlášen.")
+                return@withContext Result.failure(Exception("Uživatel není přihlášen. Prosím, nejprve se přihlaste."))
+            }
+
+            try {
+                Log.d(TAG, "Volám API pro získání uživatelských dat s tokenem.")
+                // **OPRAVA: Zkontrolujte ZDE volání apiService.getUserData()**
+                // Názvy parametrů se MUSÍ shodovat s těmi v ApiService.kt (authHeader, tokenData)
+                // Typ návratu je Response<String>
+                val userDataResponseRetrofit: Response<String> = apiService.getUserData( // Očekává Response<String>
+                    authHeader = token!!, // <-- Název parametru v ApiService MUSÍ být 'authHeader'
+                    tokenData = token!! // <-- Název parametru v ApiService MUSÍ být 'tokenData' (@Field("wst"))
+                    // Zkontrolujte další volitelné parametry zařízení, pokud jsou definovány v ApiService
+                    // device_uuid = ..., device_vendor = ..., etc. // Názvy musí odpovídat ApiService
+                )
+
+                if (!userDataResponseRetrofit.isSuccessful) {
+                    val errorBody = userDataResponseRetrofit.errorBody()?.string() ?: "Není k dispozici"
+                    Log.e(TAG, "Chyba sítě při získání uživatelských dat: ${userDataResponseRetrofit.code()}, Tělo chyby: $errorBody") // .code pro HTTP kód
+                    if (userDataResponseRetrofit.code() == 401 /* Unauthorized */) {
+                        Log.e(TAG, "Chyba 401 Unauthorized při získání uživatelských dat - mažu token.")
+                        clearAuthToken() // Maže token pomocí public metody v Repository
+                        return@withContext Result.failure(Exception("Token vypršel. Prosím, přihlaste se znovu."))
+                    }
+                    return@withContext Result.failure(Exception("Chyba sítě při získání uživatelských dat: ${userDataResponseRetrofit.code()}")) // .code pro HTTP kód
+                }
+
+                val userDataBody: String? = userDataResponseRetrofit.body() // Získá RAW XML String?
+                if (userDataBody.isNullOrEmpty()) {
+                    Log.e(TAG, "Prázdná odpověď serveru při získání uživatelských dat.")
+                    return@withContext Result.failure(Exception("Prázdná odpověď serveru při získání uživatelských dat."))
+                }
+
+                Log.d(TAG, "Parsuji XML odpověď uživatelských dat...")
+                // **Zavolat parsovací metodu z XmlUtils s tělem Stringu**
+                val userData: UserDataResponse = XmlUtils.parseUserDataResponseXml(userDataBody) // Volá metodu z XmlUtils, která musí vrátit UserDataResponse objekt
+
+                // Zde už pracujete s naparsovaným objektem userData (typu UserDataResponse)
+                when (userData.status) { // Přístup k vlastnosti 'status' na UserDataResponse
+                    "OK" -> {
+                        Log.d(TAG, "Uživatelská data úspěšně zíksána.")
+                        Result.success(userData) // Vrátí UserDataResponse objekt
+                    }
+                    "ERROR", "FATAL" -> {
+                        // Přístup k vlastnostem 'message' a 'code' na UserDataResponse
+                        Log.e(TAG, "Webshare API chyba při získání uživatelských dat: ${userData.message} (${userData.code})")
+                        if (userData.code == 102 /* Příklad kódu pro neplatný token dle API */) {
+                            Log.e(TAG, "API kód ${userData.code} při získání uživatelských dat - mažu token.")
+                            clearAuthToken() // Maže token pomocí public metody
+                            return@withContext Result.failure(Exception("Token vypršel nebo je neplatný. Prosím, přihlaste se znovu."))
+                        }
+                        Result.failure(Exception("Webshare API chyba při získání uživatelských dat: ${userData.message} (${userData.code})"))
+                    }
+                    else -> {
+                        Log.e(TAG, "Neznámý status odpovědi pro uživatelská data: ${userData.status}")
+                        Result.failure(Exception("Neznámý status odpovědi pro uživatelská data: ${userData.status}"))
+                    }
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e(TAG, "Neočekávaná chyba při získání uživatelských dat: ${e.message}")
+                Result.failure(e)
+            }
+        }
+    }
 
     // --- Implementace přihlašovací logiky (pro LoginViewModel) ---
     // Vrací Result<String>, kde String je WST token při úspěchu, nebo chyba
@@ -233,7 +310,7 @@ class WebshareRepository(
 
     // --- Implementace logiky vyhledávání souborů (pro SearchViewModel) ---
     // Vrací Result<SearchResponse> při úspěchu, nebo chyba při selhání
-    suspend fun searchFiles(query: String, category: String? = null, page: Int, itemsPerPage: Int = 20): Result<SearchResponse> { // <-- Zde je parametr itemsPerPage
+    suspend fun searchFiles(query: String, category: String? = null, page: Int, itemsPerPage: Int = 20): Result<SearchResponse> { // Přijímá parametry vyhledávání a stránkování
         Log.d(TAG, "searchFiles() volán s dotazem: '$query', kategorií: '$category', stránka: $page, na stránku: $itemsPerPage") // Log na začátku metody
 
         return withContext(Dispatchers.IO) { // Spustit v background vlákně
@@ -246,7 +323,7 @@ class WebshareRepository(
             try {
                 Log.d(TAG, "Volám API pro vyhledávání s dotazem: '$query', kategorií: '$category', stránka: $page.")
                 // **Zkontrolujte ZDE volání apiService.searchFiles()**
-                // Názvy parametrů (token, query, category, offset, limit) se MUSÍ shodovat s těmi v ApiService (WebshareApiService.kt)
+                // Názvy parametrů se MUSÍ shodovat s těmi v ApiService (token, query, category, offset, limit)
                 // Parametr 'page' z Repository se mapuje na 'offset' v ApiService
                 // Parametr 'itemsPerPage' z Repository se mapuje na 'limit' v ApiService
                 val searchResponseRetrofit: Response<String> = apiService.searchFiles(
@@ -255,7 +332,7 @@ class WebshareRepository(
                     category = category, // Název parametru v ApiService je 'category'
                     offset = page, // <-- Správný název parametru v ApiService je 'offset' (předává se do @Field("offset"))
                     limit = itemsPerPage // <-- Správný název parametru v ApiService je 'limit' (předává se do @Field("limit"))
-                    // Pokud máte další volitelné parametry v ApiService (např. device info), musí být i zde volány se správnými názvy
+                    // Pokud máte další volitelné parametry zařízení v ApiService (např. device info), musí být i zde volány se správnými názvy
                 )
 
                 if (!searchResponseRetrofit.isSuccessful) {
@@ -263,7 +340,7 @@ class WebshareRepository(
                     Log.e(TAG, "Chyba sítě při vyhledávání: ${searchResponseRetrofit.code()}, Tělo chyby: $errorBody") // .code pro HTTP kód
                     if (searchResponseRetrofit.code() == 401 /* Unauthorized */) {
                         Log.e(TAG, "Chyba 401 Unauthorized při vyhledávání - mažu token.")
-                        clearAuthToken() // Maže token pomocí public metody v Repository (která volá AuthTokenManager)
+                        clearAuthToken() // Maže token pomocí public metody
                         return@withContext Result.failure(Exception("Token vypršel. Prosím, přihlaste se znovu."))
                     }
                     return@withContext Result.failure(Exception("Chyba sítě při vyhledávání: ${searchResponseRetrofit.code()}")) // .code pro HTTP kód
@@ -277,7 +354,7 @@ class WebshareRepository(
 
                 Log.d(TAG, "Parsuji XML odpověď vyhledávání...")
                 // **Zavolat parsovací metodu z XmlUtils s tělem Stringu**
-                val searchData: SearchResponse = XmlUtils.parseSearchResponseXml(searchBody) // Volá metodu z XmlUtils, která musí vrátit SearchResponse objekt
+                val searchData: SearchResponse = XmlUtils.parseSearchResponseXml(searchBody) // Volá metodu z XmlUtils, která vrátí SearchResponse objekt
 
                 // Zde už pracujete s naparsovaným objektem searchData (typu SearchResponse)
                 when (searchData.status) { // Přístup k vlastnosti 'status' na objektu SearchResponse
@@ -285,10 +362,10 @@ class WebshareRepository(
                         val files = searchData.files // Přístup k vlastnosti 'files' na objektu SearchResponse (List<FileModel>?)
                         val total = searchData.total // Přístup k vlastnosti 'total' na objektu SearchResponse (Int)
                         Log.d(TAG, "Vyhledávání API status OK. Nalezeno $total souborů celkem.")
-                        Result.success(searchData) // Vrátí SearchResponse objekt obsahující seznam FileModel a total
+                        Result.success(searchData) // Vrátí SearchResponse objekt
                     }
                     "ERROR", "FATAL" -> {
-                        // Přístup k vlastnostem 'message' a 'code' na objektu SearchResponse (z parsovaného XML)
+                        // Přístup k vlastnostem 'message' a 'code' na objektu SearchResponse
                         Log.e(TAG, "Webshare API chyba při vyhledávání: ${searchData.message} (${searchData.code})")
                         // TODO: Zkontrolovat konkrétní API kódy chyb
                         if (searchData.code == 102 /* Příklad kódu pro neplatný token dle API */) {
@@ -339,21 +416,17 @@ class WebshareRepository(
 
             try {
                 Log.d(TAG, "Volám API pro získání odkazu pro File ID: $fileId s tokenem.")
-                // **OPRAVA: Zkontrolujte ZDE volání apiService.getFileLink()**
+                // **Zkontrolujte ZDE volání apiService.getFileLink()**
                 // Názvy parametrů se MUSÍ shodovat s těmi v ApiService (authHeader, fileId, tokenData, password, download_type, atd.)
                 // Typ návratu je Response<String>
                 val fileLinkResponseRetrofit: Response<String> = apiService.getFileLink(
                     authHeader = token!!, // Název parametru v ApiService MUSÍ být 'authHeader'
-                    fileId = fileId, // Název parametru v ApiService MUSÍ být 'fileId' (dle @Field("ident"))
+                    fileId = fileId, // Název parametru v ApiService MUSÍ být 'fileId' (dle @Field("ident")) - ZKONTROLUJTE NÁZEV V ApiService!
                     tokenData = token!!, // Název parametru v ApiService MUSÍ být 'tokenData' (@Field("wst"))
                     password = passwordHashToSend, // <-- Název parametru v ApiService MUSÍ být 'password' (@Field("password")) - sem předáváme haš
                     download_type = "video_stream" // <-- Název parametru v ApiService MUSÍ být 'download_type' (@Field("download_type"))
-                    // TODO: Zkontrolujte další volitelné parametry zařízení v ApiService a případně je zde předejte
-                    // device_uuid = getDeviceUuid(),
-                    // device_vendor = Build.MANUFACTURER,
-                    // device_model = Build.MODEL,
-                    // device_res_x = getScreenWidth(),
-                    // device_res_y = getScreenHeight()
+                    // TODO: Zkontrolujte další volitelné parametry zařízení, pokud jsou definovány v ApiService
+                    // device_uuid = ..., device_vendor = ..., etc. // Názvy musí odpovídat ApiService
                 )
 
                 if (!fileLinkResponseRetrofit.isSuccessful) {
@@ -361,7 +434,7 @@ class WebshareRepository(
                     Log.e(TAG, "Chyba sítě při získání odkazu: ${fileLinkResponseRetrofit.code()}, Tělo chyby: $errorBody") // .code pro HTTP kód
                     if (fileLinkResponseRetrofit.code() == 401 /* Unauthorized */) {
                         Log.e(TAG, "Chyba 401 Unauthorized při získání odkazu - mažu token.")
-                        clearAuthToken() // Maže token pomocí public metody v Repository
+                        clearAuthToken() // Maže token pomocí public metody
                         return@withContext Result.failure(Exception("Token vypršel. Prosím, přihlaste se znovu."))
                     }
                     return@withContext Result.failure(Exception("Chyba sítě při získání odkazu: ${fileLinkResponseRetrofit.code()}")) // .code pro HTTP kód
@@ -375,7 +448,7 @@ class WebshareRepository(
 
                 Log.d(TAG, "Parsuji XML odpověď odkazu na soubor...")
                 // **Zavolat parsovací metodu z XmlUtils s tělem Stringu**
-                val fileLinkData: FileLinkResponse = XmlUtils.parseFileLinkResponseXml(fileLinkBody) // Volá metodu z XmlUtils, která musí vrátit FileLinkResponse objekt
+                val fileLinkData: FileLinkResponse = XmlUtils.parseFileLinkResponseXml(fileLinkBody) // Volá metodu z XmlUtils
 
                 // Zde už pracujete s naparsovaným objektem fileLinkData (typu FileLinkResponse)
                 when (fileLinkData.status) { // Přístup k vlastnosti 'status' na FileLinkResponse
@@ -392,7 +465,7 @@ class WebshareRepository(
                         // Přístup k vlastnostem 'message' a 'code' na FileLinkResponse
                         Log.e(TAG, "Webshare API chyba při získání odkazu: ${fileLinkData.message} (${fileLinkData.code})")
                         // TODO: Ošetřit konkrétní API kódy chyb (např. neplatný token, špatné heslo souboru)
-                        if (fileLinkData.code == 102 /* Příklad kódu pro neplatný token */) {
+                        if (fileLinkData.code == 102 /* Příklad kódu pro neplatný token dle API */) {
                             Log.e(TAG, "API kód ${fileLinkData.code} při získání odkazu - mažu token.")
                             clearAuthToken() // Maže token pomocí public metody
                             return@withContext Result.failure(Exception("Token vypršel nebo je neplatný. Prosím, přihlaste se znovu."))
@@ -412,93 +485,6 @@ class WebshareRepository(
                 Result.failure(e)
             }
         }
-    }
-    // Implementace logiky pro získání uživatelských dat (pro SearchViewModel)
-    // Vrací Result<UserDataResponse> při úspěchu, nebo chyba při selhání
-    suspend fun getUserData(): Result<UserDataResponse> { // Vrací UserDataResponse
-        Log.d(TAG, "getUserData() volán.") // Log na začátku metody
+    }}
 
-        return withContext(Dispatchers.IO) { // Spustit v background vlákně
-            val token = getAuthToken() // Získáme WST token ze SharedPreferences
-            if (token.isNullOrEmpty()) {
-                Log.e(TAG, "Získání uživatelských dat selhalo, uživatel není přihlášen.")
-                return@withContext Result.failure(Exception("Uživatel není přihlášen. Prosím, nejprve se přihlaste."))
-            }
-
-            try {
-                Log.d(TAG, "Volám API pro získání uživatelských dat s tokenem.")
-                // **OPRAVA: Zkontrolujte ZDE volání apiService.getUserData()**
-                // Názvy parametrů se MUSÍ shodovat s těmi v ApiService.kt (authHeader, tokenData)
-                // Typ návratu je Response<String>
-                val userDataResponseRetrofit: Response<String> = apiService.getUserData(
-                    authHeader = token!!, // <-- Název parametru v ApiService je 'authHeader'
-                    tokenData = token!! // <-- Název parametru v ApiService je 'tokenData' (@Field("wst"))
-                    // Zkontrolujte další volitelné parametry zařízení, pokud jsou definovány v ApiService
-                    // device_uuid = ..., device_vendor = ..., etc. // Názvy musí odpovídat ApiService
-                )
-
-                if (!userDataResponseRetrofit.isSuccessful) {
-                    val errorBody = userDataResponseRetrofit.errorBody()?.string() ?: "Není k dispozici"
-                    Log.e(TAG, "Chyba sítě při získání uživatelských dat: ${userDataResponseRetrofit.code()}, Tělo chyby: $errorBody") // .code pro HTTP kód
-                    if (userDataResponseRetrofit.code() == 401 /* Unauthorized */) {
-                        Log.e(TAG, "Chyba 401 Unauthorized při získání uživatelských dat - mažu token.")
-                        clearAuthToken() // Maže token pomocí public metody v Repository
-                        return@withContext Result.failure(Exception("Token vypršel. Prosím, přihlaste se znovu."))
-                    }
-                    return@withContext Result.failure(Exception("Chyba sítě při získání uživatelských dat: ${userDataResponseRetrofit.code()}")) // .code pro HTTP kód
-                }
-
-                val userDataBody: String? = userDataResponseRetrofit.body() // Získá RAW XML String?
-                if (userDataBody.isNullOrEmpty()) {
-                    Log.e(TAG, "Prázdná odpověď serveru při získání uživatelských dat.")
-                    return@withContext Result.failure(Exception("Prázdná odpověď serveru při získání uživatelských dat."))
-                }
-
-                Log.d(TAG, "Parsuji XML odpověď uživatelských dat...")
-                // **Zavolat parsovací metodu z XmlUtils s tělem Stringu**
-                val userData: UserDataResponse = XmlUtils.parseUserDataResponseXml(userDataBody) // Volá metodu z XmlUtils, která musí vrátit UserDataResponse objekt
-
-                // Zde už pracujete s naparsovaným objektem userData (typu UserDataResponse)
-                when (userData.status) { // Přístup k vlastnosti 'status' na UserDataResponse
-                    "OK" -> {
-                        Log.d(TAG, "Uživatelská data úspěšně zíksána.")
-                        Result.success(userData) // Vrátí UserDataResponse objekt
-                    }
-                    "ERROR", "FATAL" -> {
-                        // Přístup k vlastnostem 'message' a 'code' na UserDataResponse
-                        Log.e(TAG, "Webshare API chyba při získání uživatelských dat: ${userData.message} (${userData.code})")
-                        if (userData.code == 102 /* Příklad kódu pro neplatný token dle API */) {
-                            Log.e(TAG, "API kód ${userData.code} při získání uživatelských dat - mažu token.")
-                            clearAuthToken() // Maže token pomocí public metody
-                            return@withContext Result.failure(Exception("Token vypršel nebo je neplatný. Prosím, přihlaste se znovu."))
-                        }
-                        Result.failure(Exception("Webshare API chyba při získání uživatelských dat: ${userData.message} (${userData.code})"))
-                    }
-                    else -> {
-                        Log.e(TAG, "Neznámý status odpovědi pro uživatelská data: ${userData.status}")
-                        Result.failure(Exception("Neznámý status odpovědi pro uživatelská data: ${userData.status}"))
-                    }
-                }
-
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Log.e(TAG, "Neočekávaná chyba při získání uživatelských dat: ${e.message}")
-                Result.failure(e)
-            }
-        }
-    }
-
-
-    // TODO: Implementovat metody pro získání soli pro heslo k souboru (pro FileLink s heslem)
-    /*
-     suspend fun getFilePasswordSalt(fileId: String): Result<String> {
-         // ... (volání API file_password_salt) ...
-         Result.failure(NotImplementedError("Získání soli pro heslo k souboru zatím není implementováno.")) // Placeholder
-     }
-    */
-
-    // TODO: Implementovat metody pro získání info o zařízení a rozlišení pro předání do API volání
-
-
-    // TODO: Ujistěte se, že vaše třída AuthTokenManager.kt má metody saveToken, getToken, clearToken, saveCredentials, loadCredentials, clearCredentials
-}
+// ... (ostatní metody níže) ...

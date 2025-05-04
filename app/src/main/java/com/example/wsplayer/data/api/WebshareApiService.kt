@@ -51,12 +51,11 @@ interface WebshareApiService {
     @POST("search/")
     suspend fun searchFiles(
         @Field("wst") token: String,
-        @Field("what") query: String,
-        @Field("sort") sort: String? = null,
-        @Field("limit") limit: Int? = null,
-        @Field("offset") offset: Int? = null,
-        @Field("category") category: String? = null
-
+        @Field("what") query: String, // <-- @Field musí odpovídat API dokumentaci (what)
+        @Field("sort") sort: String? = null, // Volitelný parametr pro řazení
+        @Field("limit") limit: Int? = null, // Volitelný limit pro počet položek na stránku
+        @Field("offset") offset: Int? = null, // Volitelný offset pro stránkování (page * limit)
+        @Field("category") category: String? = null // Volitelný parametr pro ID kategorie
         // TODO: Další parametry, pokud API podporuje a vyžaduje (např. device info)
     ): Response<String> // <-- Vrací Response<String>
 
@@ -69,13 +68,14 @@ interface WebshareApiService {
         @Field("ident") fileId: String, // Identifikátor souboru
         @Field("wst") tokenData: String, // API dokumentace ukazuje token i v datech pro file_link
         @Field("password") password: String? = null, // Hašované heslo pro soubory s heslem
-        @Field("download_type") download_type: String? = "video_stream", // Typ odkazu (stream, download)
+        @Field("download_type") download_type: String? = "video_stream", // <-- @Field musí odpovídat API dokumentaci (download_type)
         // TODO: Volitelně přidejte parametry zařízení, pokud to API podporuje a vyžaduje
-        // @Field("device_uuid") deviceUuid: String? = null,
-        // @Field("device_vendor") deviceVendor: String? = null,
-        // @Field("device_model") deviceModel: String? = null,
-        // @Field("device_res_x") deviceResX: Int? = null,
-        // @Field("device_res_y") deviceResY: Int? = null
+        @Field("device_uuid") device_uuid: String? = null,
+        @Field("device_vendor") device_vendor: String? = null,
+        @Field("device_model") device_model: String? = null,
+        @Field("device_res_x") device_res_x: Int? = null,
+        @Field("device_res_y") device_res_y: Int? = null,
+        @Field("force_https") force_https: Int? = null
     ): Response<String> // <-- Vrací Response<String>
 
     // Metoda pro získání uživatelských dat (/api/user_data/)

@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope // Pro práci s coroutines ve ViewModel
 
 // **Import Repository**
 import com.example.wsplayer.data.repository.WebshareRepository
-
 // **Import pro utility pro hašování a parsování XML**
 import com.example.wsplayer.utils.HashingUtils // Utility pro hašování
 import com.example.wsplayer.utils.XmlUtils // Utility pro parsování XML
@@ -80,7 +79,7 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
 
         viewModelScope.launch {
             Log.d(TAG, "Spouštím auto-login coroutine.")
-            val credentials = repository.loadCredentials() // Načíst uložené credentials (Pair<username, passwordHash>?)
+            val credentials = repository.loadCredentials() // Načíst uložené credentials
 
             if (credentials != null) {
                 val (username, passwordHash) = credentials
@@ -94,7 +93,7 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
                     val token = loginResult.getOrThrow()
                     // Při úspěchu auto-loginu credentials již uložené jsou, token byl uložen v Repository
                     Log.d(TAG, "Auto-login úspěšný s tokenem.")
-                    loadUserData() // Načíst uživatelská data po úspěšném auto-loginu
+                    loadUserData() // Načíst uživatelská data
                     _loginState.postValue(LoginState.Success(token)) // Nastavit stav na úspěch
                 } else {
                     Log.e(TAG, "Auto-login selhal. ${loginResult.exceptionOrNull()?.message}. Mažu credentials a zobrazuji formulář.")
@@ -117,7 +116,7 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
         Log.d(TAG, "login() volán s username '$username', rememberMe=$rememberMe.")
         // Zkontrolovat vstupní údaje (prázdné pole atd.)
         if (username.isEmpty() || password.isEmpty()) {
-            _loginState.value = LoginState.Error("Uživatelské jméno a heslo nesmí být prázdné.") // Nastavit stav chyby
+            _loginState.value = LoginState.Error("Uživatelské jméno a heslo nesmí být prázdné.")
             Log.d(TAG, "Prázdné údaje.")
             return
         }
@@ -128,7 +127,6 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
             return
         }
 
-
         _loginState.value = LoginState.Loading // Nastavit stav na načítání
 
         viewModelScope.launch {
@@ -136,61 +134,62 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
             // --- Fáze 1: Získání soli z Repository ---
             val saltResult = repository.getSalt(username) // Volání getSalt z Repository
 
-            if (saltResult.isFailure) {
-                Log.e(TAG, "Získání soli selhalo: ${saltResult.exceptionOrNull()?.message}")
-                _loginState.postValue(LoginState.Error("Chyba při získání soli: ${saltResult.exceptionOrNull()?.message}"))
-                return@launch // Ukončit coroutine
-            }
+            // **OPRAVA: Explicitně ošetřit výsledek z getSalt**
+            saltResult.fold(
+                onSuccess = { salt ->
+                    // *** TENTO BLOK SE SPUSTÍ POUZE PŘI ÚSPĚCHU getSalt ***
+                    Log.d(TAG, "Získání soli úspěšné. Salt: $salt")
 
-            val salt = saltResult.getOrThrow()
+                    // --- Fáze 2: Hašování hesla (pomocí Utility třídy) ---
+                    Log.d(TAG, "Provádím hašování hesla.")
+                    val passwordHashResult = HashingUtils.calculateWebsharePasswordHash(password, salt) // Použít získanou sůl
 
-            // --- Fáze 2: Hašování hesla (pomocí Utility třídy, volá se zde, ne v Repository) ---
-            // Hašování probíhá na background vlákně díky viewModelScope.launch, i když Utility nemusí být suspend
-            Log.d(TAG, "Provádím hašování hesla.")
-            val passwordHashResult = HashingUtils.calculateWebsharePasswordHash(password, salt) // Volání Utility
+                    if (passwordHashResult.isFailure) {
+                        Log.e(TAG, "Hašování selhalo: ${passwordHashResult.exceptionOrNull()?.message}")
+                        _loginState.postValue(LoginState.Error("Chyba při hašování hesla: ${passwordHashResult.exceptionOrNull()?.message}"))
+                        return@fold // Ukončit blok fold/onSuccess
+                    }
 
-            if (passwordHashResult.isFailure) {
-                Log.e(TAG, "Hašování selhalo: ${passwordHashResult.exceptionOrNull()?.message}")
-                _loginState.postValue(LoginState.Error("Chyba při hašování hesla: ${passwordHashResult.exceptionOrNull()?.message}"))
-                return@launch // Ukončit coroutine
-            }
+                    val passwordHash = passwordHashResult.getOrThrow()
 
-            val passwordHash = passwordHashResult.getOrThrow()
+                    // --- Fáze 3: Přihlášení v Repository s hashem hesla ---
+                    Log.d(TAG, "Volám Repository.login s hashem hesla.")
+                    val loginResult = repository.login(username, passwordHash)
 
-            // --- Fáze 3: Přihlášení v Repository s hashem hesla ---
-            Log.d(TAG, "Volám Repository.login s hashem hesla.")
-            // repository.login přijímá username a HASH hesla
-            val loginResult = repository.login(username, passwordHash) // Volání login z Repository
+                    if (loginResult.isSuccess) {
+                        val token = loginResult.getOrThrow()
+                        Log.d(TAG, "Repository.login úspěšný.")
 
-            if (loginResult.isSuccess) {
-                val token = loginResult.getOrThrow()
-                Log.d(TAG, "Repository.login úspěšný.")
+                        // **Fáze 4: Správa lokálních dat na základě rememberMe**
+                        if (rememberMe) {
+                            Log.d(TAG, "Checkbox 'Zapamatovat si mě' byl true. Ukládám credentials...")
+                            repository.saveCredentials(username, passwordHash)
+                        } else {
+                            Log.d(TAG, "Checkbox 'Zapamatovat si mě' byl false. Mažu credentials...")
+                            repository.clearCredentials()
+                        }
 
-                // **Fáze 4: Správa lokálních dat na základě rememberMe**
-                // Repository již uložila token. Zde uložíme/smažeme credentials podle checkboxu.
-                if (rememberMe) {
-                    // Uživatel si přál být zapamatován - uložit credentials (username + hash)
-                    Log.d(TAG, "Checkbox 'Zapamatovat si mě' byl true. Ukládám credentials...")
-                    repository.saveCredentials(username, passwordHash) // Uložit credentials (s hashem)
-                } else {
-                    // Uživatel si NEPŘÁL být zapamatován - smazat uložené credentials
-                    Log.d(TAG, "Checkbox 'Zapamatovat si mě' byl false. Mažu credentials...")
-                    repository.clearCredentials() // Smazat credentials
+                        // **Fáze 5: Načtení uživatelských dat po úspěšném přihlášení**
+                        loadUserData() // Načíst uživatelská data (asynchronně)
+                        Log.d(TAG, "Načtení uživatelských dat spuštěno.")
+
+                        // **Fáze 6: Nastavení úspěšného stavu**
+                        _loginState.postValue(LoginState.Success(token))
+                        Log.d(TAG, "Nastavuji stav LoginState.Success($token).")
+
+                    } else {
+                        Log.e(TAG, "Repository.login selhal: ${loginResult.exceptionOrNull()?.message}")
+                        _loginState.postValue(LoginState.Error("Přihlášení selhalo: ${loginResult.exceptionOrNull()?.message}"))
+                    }
+                },
+                onFailure = { error ->
+                    // *** TENTO BLOK SE SPUSTÍ POUZE PŘI SELHÁNÍ getSalt ***
+                    Log.e(TAG, "Získání soli selhalo ve ViewModelu: ${error.message}")
+                    _loginState.postValue(LoginState.Error("Chyba při získání soli: ${error.message}"))
                 }
+            ) // Konec fold
 
-                // **Fáze 5: Načtení uživatelských dat po úspěšném přihlášení**
-                loadUserData() // Načíst uživatelská data (asynchronně)
-                Log.d(TAG, "Načtení uživatelských dat spuštěno.")
-
-                // **Fáze 6: Nastavení úspěšného stavu**
-                _loginState.postValue(LoginState.Success(token)) // **Nastavit stav na úspěch**
-                Log.d(TAG, "Nastavuji stav LoginState.Success($token).")
-
-            } else {
-                Log.e(TAG, "Repository.login selhal: ${loginResult.exceptionOrNull()?.message}")
-                // Přihlášení v Repository selhalo (síť, API chyba atd.)
-                _loginState.postValue(LoginState.Error("Přihlášení selhalo: ${loginResult.exceptionOrNull()?.message}")) // Nastavit stav chyby
-            }
+            // **ZDE KÓD NEPOKRAČUJE, pokud se spustil onSuccess nebo onFailure**
         }
     }
 

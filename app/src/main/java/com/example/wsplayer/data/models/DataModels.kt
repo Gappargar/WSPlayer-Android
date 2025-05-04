@@ -1,5 +1,5 @@
 // app/src/main/java/com/example/wsplayer/data/models/DataModels.kt
-package com.example.wsplayer.data.models // Váš balíček - ZKONTROLUJTE, musí být správně!
+package com.example.wsplayer.data.models // Váš balíček - ZKONTROLUJTE
 
 // Tento soubor by měl obsahovat VŠECHNY datové třídy pro API odpovědi a stavy UI
 
@@ -41,7 +41,8 @@ data class SearchResponse(
     val total: Int, // Celkový počet výsledků pro daný dotaz
     val files: List<FileModel>?, // Seznam nalezených souborů (tag <file> se opakuje)
     val code: Int?,
-    val message: String?
+    val message: String?,
+    val appVersion: Int? = null // <--- PŘIDÁNO: Pole pro uložení hodnoty z tagu <app_version>
 )
 
 // Datová třída pro odpověď z /api/file_link/ (RAW API ODPOVĚĎ)
@@ -65,7 +66,6 @@ data class UserDataResponse(
     val score_files: String?, // Stažené soubory
     val score_bytes: String?, // Velikost stažených souborů
     val private_files: String?, // Počet soukromých souborů
-    // **OPRAVA: Odstranit jednu z duplicitních deklarací pro private_space/private_bytes**
     val private_bytes: String?, // Velikost soukromých souborů
     val private_space: String?, // Velikost soukromého prostoru
     val tester: String?, // Tester
@@ -81,12 +81,11 @@ data class UserDataResponse(
 
 // TODO: Přidat datové třídy pro další API odpovědi (např. file_password_salt)
 
-// **Sealed class reprezentující RŮZNÉ STAVY PROCESU VYHLEDÁVÁNÍ SOUBORŮ (STAVY UI pro ViewModel/Activity)**
+// **Sealed class reprezentující RŮZNÉ STAVY PROCESU VYhledávání SOUBORŮ (STAVY UI pro ViewModel/Activity)**
 sealed class SearchState {
     object Idle : SearchState() // Počáteční stav nebo po dokončení vyhledávání
     object Loading : SearchState() // Vyhledávání probíhá (první stránka)
     data class Success(val results: List<FileModel>, val totalResults: Int) : SearchState() // Úspěch s výsledky (používá FileModel)
-    // POZOR: V DataModels jste měl(a) Error. Zůstaneme u Error, jak se používá v SearchActivity/ViewModel
     data class Error(val message: String) : SearchState() // Chyba (nese zprávu)
     object EmptyResults : SearchState() // Nalezeno 0 výsledků
     object LoadingMore : SearchState() // Načítání dalších stránek
@@ -97,9 +96,7 @@ sealed class FileLinkState {
     object Idle : FileLinkState() // Počáteční stav
     object LoadingLink : FileLinkState() // Získávání odkazu probíhá
     data class LinkSuccess(val fileUrl: String) : FileLinkState() // Odkaz úspěšně získán (nese URL)
-    // Pokud v kódu SearchActivity a SearchViewModel používáte LinkError,
-    // je potřeba ho tak pojmenovat i zde. Zůstaneme u Error.
     data class Error(val message: String) : FileLinkState() // Chyba při získání odkazu (nese zprávu)
-    // Poznámka: V předchozí verzi jsem navrhoval LinkError, ale ve vašem kódu se jmenoval jen Error.
-    // Důležité je, aby se název zde SHODOVAL s tím, co používáte ve SearchActivity a SearchViewModel
+    // Poznámka: Pokud byste chtěl(a) stav LinkError explicitně, přejmenujte toto na LinkError
+    // a opravte to i v SearchActivity a SearchViewModel. Nyní se stav jmenuje Error.
 }

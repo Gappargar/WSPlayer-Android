@@ -141,7 +141,7 @@ class SearchActivity : AppCompatActivity() {
         viewModel.searchState.observe(this) { state -> // 'state' je aktuální SearchState
             println("SearchActivity: Observer searchState spuštěn. Aktuální stav: $state") // Log aktuálního stavu
             when (state) { // Zpracování různých stavů vyhledávání (vyčerpávající 'when')
-                is SearchViewModel.SearchState.Idle -> {
+                is SearchState.Idle -> { // Použití SearchState přímo (po importu z data.models.*)
                     binding.progressBarSearch.visibility = View.GONE
                     binding.buttonSearch.isEnabled = true
                     // Binding prvků, které se zobrazují v Idle stavu
@@ -149,14 +149,14 @@ class SearchActivity : AppCompatActivity() {
                     binding.textViewSearchMessage.text = "Zadejte, co hledáte..."
                     binding.textViewSearchMessage.visibility = View.VISIBLE
                 }
-                is SearchViewModel.SearchState.Loading -> { // Stav načítání první stránky
+                is SearchState.Loading -> { // Stav načítání první stránky
                     binding.progressBarSearch.visibility = View.VISIBLE // Zobrazit hlavní progress bar
                     binding.buttonSearch.isEnabled = false
                     // Binding prvků, které se skrývají v Loading stavu
                     binding.recyclerViewSearchResults.visibility = View.GONE
                     binding.textViewSearchMessage.visibility = View.GONE
                 }
-                is SearchViewModel.SearchState.Success -> { // Úspěšně načteny výsledky (první nebo další stránka)
+                is SearchState.Success -> { // Úspěšně načteny výsledky (první nebo další stránka)
                     binding.progressBarSearch.visibility = View.GONE
                     binding.buttonSearch.isEnabled = true
 
@@ -170,7 +170,7 @@ class SearchActivity : AppCompatActivity() {
                     // Toast s informací o výsledcích (používá string resource, pokud je definován)
                     Toast.makeText(this, "Vyhledávání úspěšné! Nalezeno ${state.results.size} souborů na stránce. Celkem: ${state.totalResults}", Toast.LENGTH_SHORT).show()
                 }
-                is SearchViewModel.SearchState.Error -> { // Chyba při vyhledávání
+                is SearchState.Error -> { // Chyba při vyhledávání
                     binding.progressBarSearch.visibility = View.GONE
                     binding.buttonSearch.isEnabled = true
                     if (::searchAdapter.isInitialized) {
@@ -181,7 +181,7 @@ class SearchActivity : AppCompatActivity() {
                     binding.textViewSearchMessage.visibility = View.VISIBLE
                     Toast.makeText(this, "Chyba při vyhledávání: ${state.message}", Toast.LENGTH_LONG).show() // state.message
                 }
-                is SearchViewModel.SearchState.EmptyResults -> { // Nalezeno 0 výsledků
+                is SearchState.EmptyResults -> { // Nalezeno 0 výsledků
                     binding.progressBarSearch.visibility = View.GONE
                     binding.buttonSearch.isEnabled = true
                     if (::searchAdapter.isInitialized) {
@@ -192,9 +192,9 @@ class SearchActivity : AppCompatActivity() {
                     binding.textViewSearchMessage.visibility = View.VISIBLE
                     Toast.makeText(this, "Nenalezeny žádné soubory.", Toast.LENGTH_SHORT).show()
                 }
-                is SearchViewModel.SearchState.LoadingMore -> { // Stav načítání dalších stránek (pro stránkování)
+                is SearchState.LoadingMore -> { // Stav načítání dalších stránek (pro stránkování)
                     println("SearchActivity: SearchState je LoadingMore.") // Log
-                    // TODO: Zobrazit indikátor načítání pro stránkování (např. malý progress bar dole)
+                    // TODO: Zde můžete zobrazit indikátor načítání pro stránkování (např. malý progress bar dole)
                     // binding.progressBarPagination.visibility = View.VISIBLE // Předpokládá, že máte takový prvek v layoutu
                     binding.progressBarSearch.visibility = View.GONE // Hlavní progress bar by měl být skryt
                     // Seznam výsledků (_searchResults.value) se zde NEMĚNÍ, zůstávají zobrazené předchozí položky
@@ -209,16 +209,16 @@ class SearchActivity : AppCompatActivity() {
         viewModel.fileLinkState.observe(this) { state -> // 'state' je aktuální FileLinkState
             println("SearchActivity: Observer fileLinkState spuštěn. Aktuální stav: $state") // Log aktuálního stavu
             when (state) { // Zpracování různých stavů získání odkazu (vyčerpávající 'when')
-                is SearchViewModel.FileLinkState.Idle -> {
+                is FileLinkState.Idle -> { // Použití FileLinkState přímo
                     // TODO: Skrýt indikátor získávání odkazu
                     // binding.progressBarGettingLink.visibility = View.GONE
                 }
-                is SearchViewModel.FileLinkState.LoadingLink -> {
+                is FileLinkState.LoadingLink -> { // Použití FileLinkState přímo
                     // TODO: Zobrazit indikátor získávání odkazu
                     // binding.progressBarGettingLink.visibility = View.VISIBLE
                     Toast.makeText(this, "Získávám odkaz na soubor...", Toast.LENGTH_SHORT).show()
                 }
-                is SearchViewModel.FileLinkState.LinkSuccess -> {
+                is FileLinkState.LinkSuccess -> { // Použití FileLinkState přímo
                     // Odkaz úspěšně získán - nyní spustíme externí přehrávač
                     // TODO: Skrýt indikátor získávání odkazu
                     // binding.progressBarGettingLink.visibility = View.GONE
@@ -249,7 +249,7 @@ class SearchActivity : AppCompatActivity() {
                         binding.textViewSearchMessage.visibility = View.VISIBLE
                     }
                 }
-                is SearchViewModel.FileLinkState.Error -> { // <- POZOR, název stavu podle DataModels.kt
+                is FileLinkState.Error -> { // <- POZOR, název stavu podle DataModels.kt (pokud LinkError, opravit zde)
                     // Došlo k chybě při získání odkazu
                     // TODO: Skrýt indikátor získávání odkazu
                     // binding.progressBarGettingLink.visibility = View.GONE
@@ -263,7 +263,7 @@ class SearchActivity : AppCompatActivity() {
 
 
         // **NOVÝ Observer pro kontrolu přihlášení na základě TOKENU v SearchViewModelu**
-        // Toto zajistí přesměrování na login obrazovku, pokud uživatel přestane být přihlášen (např. smazání tokenu při logoutu)
+        // Tento observer zajistí přesměrování na login obrazovku, pokud uživatel přestane být přihlášen (např. smazání tokenu při logoutu)
         println("SearchActivity: Nastavuji Observer pro viewModel.isUserLoggedIn.") // Log
         viewModel.isUserLoggedIn.observe(this) { isLoggedIn -> // 'isLoggedIn' je Boolean
             println("SearchActivity: Observer isUserLoggedIn spuštěn. isUserLoggedIn: $isLoggedIn") // Log stavu
@@ -360,7 +360,7 @@ class SearchActivity : AppCompatActivity() {
         println("SearchActivity: <<< onDestroy dokončen.") // Log
     }
 
-    // TODO: SearchActivity pravděpodobně potřebuje svůj vlastní layout activity_search.xml
+    // TODO: SearchActivity potřebuje svůj vlastní layout activity_search.xml
     // který obsahuje UI prvky jako jsou editTextSearchQuery, spinnerCategory, buttonSearch,
     // recyclerViewSearchResults, textViewSearchMessage, progressBarSearch, buttonSettings
     // s odpovídajícími ID.

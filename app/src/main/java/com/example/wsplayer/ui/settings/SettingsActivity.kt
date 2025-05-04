@@ -22,9 +22,14 @@ import com.example.wsplayer.ui.search.SearchViewModelFactory // Factory pro Sear
 // Import pro View Binding (vygenerovaná třída) (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.databinding.ActivitySettingsBinding
 
+// Importy pro Repository, AuthTokenManager, ApiService - potřeba pro Factory volání (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.data.repository.WebshareRepository
+import com.example.wsplayer.AuthTokenManager // Import AuthTokenManager
+import com.example.wsplayer.data.api.WebshareApiService // Import ApiService
+
 
 // Activity pro obrazovku nastavení
-// Obsahuje tlačítko pro odhlášení
+// Spouští se ze SearchActivity
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
@@ -41,31 +46,18 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(binding.root) // Použití binding.root
         println("SettingsActivity: ContentView nastaven.")
 
-        // --- Inicializace ViewModelu (použijeme SearchViewModel) ---
+        // --- Inicializace ViewModelu (použijeme SearchViewModel) pomocí Factory ---
         // SearchViewModelFactory potřebuje Context a ApiService pro vytvoření Repository uvnitř
-        // Zkontrolujte, zda máte tyto dependency pro Factory, nebo SearchViewModelFactory upravte
-        // aby je přijímala (jak je v kódu SearchViewModelFactory, který jsem poslal(a)).
-        // Předpokládáme, že ApiService, AuthTokenManager a Repository jsou dostupné/vytvořené
-        // pro SearchViewModelFactory.
-        // Pokud vaše Factory pro SearchViewModel potřebuje jiné parametry, upravte volání níže.
-
-        // Získání závislostí pro Factory (pokud je potřeba pro vaši SearchViewModelFactory)
-        // val apiService = WebshareApiService.create() // Pokud Factory potřebuje ApiService
-        // val authTokenManager = AuthTokenManager(applicationContext) // Pokud Factory potřebuje AuthTokenManager
-        // val repository = WebshareRepository(apiService, authTokenManager) // Pokud Factory potřebuje Repository
-
-        // **Získání instance SearchViewModelu pomocí Factory**
-        // Použijte stejnou Factory jako SearchActivity.
-        // Předpokládáme, že SearchViewModelFactory přijímá Context a ApiService a vytváří Repository.
+        // Použijeme stejnou Factory jako SearchActivity.
         // Zkontrolujte cesty k ApiService a Factory
-        val apiService = com.example.wsplayer.data.api.WebshareApiService.create() // Zkontrolujte cestu k ApiService
-        val viewModelFactory = com.example.wsplayer.ui.search.SearchViewModelFactory(applicationContext, apiService) // Zkontrolujte cestu k Factory
-        viewModel = ViewModelProvider(this, viewModelFactory).get(com.example.wsplayer.ui.search.SearchViewModel::class.java) // Získání SearchViewModelu
+        val apiService = WebshareApiService.create() // Zkontrolujte cestu k ApiService
+        val viewModelFactory = SearchViewModelFactory(applicationContext, apiService) // Zkontrolujte cestu k Factory
+        viewModel = ViewModelProvider(this, viewModelFactory).get(SearchViewModel::class.java) // Získání SearchViewModelu
         println("SettingsActivity: ViewModel (SearchViewModel) získán.")
 
 
         // --- Sledování stavu přihlášení z ViewModelu ---
-        // Toto zajistí přesměrování na login obrazovku, pokud se uživatel odhlásí
+        // Toto zajistí přesměrování na login obrazovku, pokud se uživatel odhlásí (např. voláním logout)
         println("SettingsActivity: Nastavuji Observer pro viewModel.isUserLoggedIn.") // Log
         viewModel.isUserLoggedIn.observe(this) { isLoggedIn ->
             println("SettingsActivity: Observer isUserLoggedIn spuštěn. isUserLoggedIn: $isLoggedIn") // Log stavu
@@ -88,7 +80,7 @@ class SettingsActivity : AppCompatActivity() {
 
 
         // --- Nastavení listeneru na tlačítko Odhlásit se ---
-        // Předpokládá, že máte v activity_settings.xml tlačítko s ID např. @+id/buttonLogout
+        // Předpokládá, že máte v activity_settings.xml tlačítko s ID @+id/buttonLogout
         println("SettingsActivity: Nastavuji OnClickListener pro tlačítko Odhlásit.") // Log
         binding.buttonLogout.setOnClickListener { // **Zkontrolujte ID tlačítka v activity_settings.xml**
             println("SettingsActivity: Kliknuto na tlačítko Odhlásit.") // Log
@@ -111,7 +103,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        println("SettingsActivity: >>> onDestroy spuštěn.") // Log
+        println("SettingsActivity: >>> onDestroy spuštěn. PID: ${android.os.Process.myPid()}") // Log
         // Uvolněte zdroje specifické pro SettingsActivity, pokud nějaké máte
         super.onDestroy()
         println("SettingsActivity: <<< onDestroy dokončen.") // Log
