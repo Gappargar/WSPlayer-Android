@@ -10,6 +10,12 @@ import retrofit2.http.Header // Import pro @Header anotaci
 import retrofit2.Retrofit // Import pro Retrofit Builder
 import retrofit2.converter.scalars.ScalarsConverterFactory // Import pro konvertor Stringů
 
+// Import pro OkHttpClient a LoggingInterceptor (doporučeno pro ladění API volání)
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import java.util.concurrent.TimeUnit
+
+
 // TODO: Nastavte správnou základní URL vašeho API
 private const val BASE_URL = "https://webshare.cz/api/"
 
@@ -17,67 +23,70 @@ private const val BASE_URL = "https://webshare.cz/api/"
 // Definujte metody pro jednotlivé API endpointy
 interface WebshareApiService {
 
-    // Metoda pro získání soli pro hašování hesla
-    // Vrací XML odpověď jako String
+    // Metoda pro získání soli pro hašování hesla (/api/salt/)
+    // Vrací XML jako String
     @FormUrlEncoded // Označuje, že data budou odeslána jako form-urlencoded
     @POST("salt/") // Specifikuje relativní URL endpointu
-    suspend fun getSalt(@Field("username_or_email") username: String): Response<String> // <-- Vrací Response s tělem typu String
+    suspend fun getSalt(@Field("username_or_email") username: String): Response<String> // <-- Vrací Response<String>
 
-    // Metoda pro přihlášení uživatele
-    // Vrací XML odpověď s tokenem jako String
+    // Metoda pro přihlášení uživatele (/api/login/)
+    // Vrací XML s tokenem jako String
     @FormUrlEncoded
     @POST("login/")
     suspend fun login(
         @Field("username_or_email") username: String,
-        @Field("password") passwordHash: String, // Očekává hašované heslo
+        @Field("password") password: String, // Očekává hašované heslo
         @Field("keep_logged_in") keepLoggedIn: Int // 1 pro zapamatování, 0 ne
-    ): Response<String> // <-- Vrací Response s tělem typu String
+    ): Response<String> // <-- Vrací Response<String>
 
-    // Metoda pro odhlášení uživatele
-    // Vrací XML odpověď (status OK/ERROR/FATAL) jako String
+    // Metoda pro odhlášení uživatele (/api/logout/)
+    // Vrací XML (status OK/ERROR/FATAL) jako String
     @FormUrlEncoded
     @POST("logout/")
-    suspend fun logout(@Field("wst") token: String): Response<String> // <-- Vrací Response s tělem typu String
+    suspend fun logout(@Field("wst") token: String): Response<String> // <-- Vrací Response<String>
 
-    // Metoda pro vyhledávání souborů
-    // Vrací XML odpověď se seznamem souborů jako String
+    // Metoda pro vyhledávání souborů (/api/search/)
+    // Vrací XML se seznamem souborů jako String
     @FormUrlEncoded
     @POST("search/")
     suspend fun searchFiles(
         @Field("wst") token: String,
-        @Field("query") query: String,
-        @Field("sort") sort: String? = null, // Volitelný parametr pro řazení
-        @Field("limit") limit: Int? = null, // Volitelný limit pro počet položek na stránku
-        @Field("offset") offset: Int? = null, // Volitelný offset pro stránkování (page * limit)
-        @Field("category") category: String? = null // Volitelný parametr pro ID kategorie
-    ): Response<String> // <-- Vrací Response s tělem typu String
+        @Field("what") query: String,
+        @Field("sort") sort: String? = null,
+        @Field("limit") limit: Int? = null,
+        @Field("offset") offset: Int? = null,
+        @Field("category") category: String? = null
 
-    // Metoda pro získání přímého odkazu na soubor
-    // Vrací XML odpověď s přímým odkazem jako String
+        // TODO: Další parametry, pokud API podporuje a vyžaduje (např. device info)
+    ): Response<String> // <-- Vrací Response<String>
+
+    // Metoda pro získání přímého odkazu na soubor (/api/file_link/)
+    // Vrací XML s přímým odkazem jako String
     @FormUrlEncoded
     @POST("file_link/")
     suspend fun getFileLink(
-        @Header("Authorization") wstTokenHeader: String, // API může očekávat token v hlavičce
-        @Field("ident") fileId: String,
-        @Field("wst") wstTokenData: String, // API dokumentace ukazuje token i v datech pro file_link
-        @Field("password") passwordHash: String? = null, // Hašované heslo pro soubory s heslem
-        @Field("download_type") downloadType: String? = "video_stream", // Typ odkazu (stream, download)
+        @Header("Authorization") authHeader: String, // API očekává token v hlavičce "Authorization: WST <token>"
+        @Field("ident") fileId: String, // Identifikátor souboru
+        @Field("wst") tokenData: String, // API dokumentace ukazuje token i v datech pro file_link
+        @Field("password") password: String? = null, // Hašované heslo pro soubory s heslem
+        @Field("download_type") download_type: String? = "video_stream", // Typ odkazu (stream, download)
         // TODO: Volitelně přidejte parametry zařízení, pokud to API podporuje a vyžaduje
-        @Field("device_uuid") deviceUuid: String? = null,
-        @Field("device_vendor") deviceVendor: String? = null,
-        @Field("device_model") deviceModel: String? = null,
-        @Field("device_res_x") deviceResX: Int? = null,
-        @Field("device_res_y") deviceResY: Int? = null
-    ): Response<String> // <-- Vrací Response s tělem typu String
+        // @Field("device_uuid") deviceUuid: String? = null,
+        // @Field("device_vendor") deviceVendor: String? = null,
+        // @Field("device_model") deviceModel: String? = null,
+        // @Field("device_res_x") deviceResX: Int? = null,
+        // @Field("device_res_y") deviceResY: Int? = null
+    ): Response<String> // <-- Vrací Response<String>
 
-    // Metoda pro získání uživatelských dat
-    // Vrací XML odpověď s detaily o účtu jako String
+    // Metoda pro získání uživatelských dat (/api/user_data/)
+    // Vrací XML s detaily o účtu jako String
     @FormUrlEncoded
     @POST("user_data/")
     suspend fun getUserData(
-        @Header("Authorization") wstTokenHeader: String, // API může očekávat token v hlavičce
-        @Field("wst") wstTokenData: String // API dokumentace ukazuje token i v datech pro user_data
-    ): Response<String> // <-- Vrací Response s tělem typu String
+        @Header("Authorization") authHeader: String, // API očekává token v hlavičce "Authorization: WST <token>"
+        @Field("wst") tokenData: String // API dokumentace ukazuje token i v datech pro user_data
+        // TODO: Volitelně přidejte parametry zařízení
+    ): Response<String> // <-- Vrací Response<String>
 
 
     // TODO: Metoda pro získání soli pro heslo k souboru (/api/file_password_salt/)
@@ -94,13 +103,31 @@ interface WebshareApiService {
     // --- Objekt pro vytvoření instance Retrofitu a služby ---
     // Tento companion object vytvoří instanci Retrofitu a WebshareApiService
     companion object {
-        // Použití ScalarsConverterFactory pro převod String <-> Body
+        // Vytvoření Logging Interceptoru pro zobrazení API požadavků/odpovědí v Logcatu
+        private val loggingInterceptor = HttpLoggingInterceptor().apply {
+            setLevel(HttpLoggingInterceptor.Level.BODY) // Logovat tělo požadavků/odpovědí
+        }
+
+        // Vytvoření OkHttpClientu s interceptorem
+        private val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor(loggingInterceptor) // Přidání logovacího interceptoru
+            // Volitelně nastavit timeouty
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+
+        // Vytvoření instance Retrofitu
         private val retrofit = Retrofit.Builder()
-            .addConverterFactory(ScalarsConverterFactory.create()) // Konvertor pro String (XML)
+            .client(okHttpClient) // Použití vlastního OkHttpClientu
+            .addConverterFactory(ScalarsConverterFactory.create()) // Použít ScalarsConverterFactory pro XML/String
+            // Pokud byste parsoval(a) JSON, použijte Moshi/Gson konvertor:
+            // .addConverterFactory(MoshiConverterFactory.create(moshi))
             .baseUrl(BASE_URL) // Základní URL API
             .build()
 
-        // Veřejná instance služby Retrofit API (lazy inicializace pro efektivitu)
+        // Veřejná instance služby Retrofit API, ke které mohou komponenty přistupovat
         val apiService: WebshareApiService by lazy {
             retrofit.create(WebshareApiService::class.java)
         }

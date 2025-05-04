@@ -1,13 +1,13 @@
 // app/src/main/java/com/example/wsplayer/utils/XmlUtils.kt
 package com.example.wsplayer.utils // Váš balíček pro utility - ZKONTROLUJTE
 
-import android.util.Log // Pro logování
+import android.util.Log
 import com.example.wsplayer.data.models.* // <-- Důležité: Importujte vaše modelové třídy!
-import org.xmlpull.v1.XmlPullParser // Import pro XmlPullParser
-import org.xmlpull.v1.XmlPullParserException // Import pro XmlPullParserException
-import org.xmlpull.v1.XmlPullParserFactory // Import pro XmlPullParserFactory
-import java.io.IOException // Import pro IOException
-import java.io.StringReader // Import pro StringReader
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserException
+import org.xmlpull.v1.XmlPullParserFactory
+import java.io.IOException
+import java.io.StringReader
 
 // Objekt pro parsování XML odpovědí z Webshare.cz API
 object XmlUtils {
@@ -45,7 +45,7 @@ object XmlUtils {
         return result
     }
 
-    // Parsuje XML odpověď z /api/salt/
+    // Parsuje XML odpověď z /api/salt/ na SaltResponse
     fun parseSaltResponseXml(xmlString: String): SaltResponse {
         try {
             val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
@@ -63,24 +63,23 @@ object XmlUtils {
                     when (parser.name) {
                         "status" -> status = readText(parser)
                         "salt" -> salt = readText(parser)
-                        "code" -> code = readText(parser).toIntOrNull() // Pokusit se parsovat na Int
+                        "code" -> code = readText(parser).toIntOrNull()
                         "message" -> message = readText(parser)
+                        else -> skip(parser) // Přeskočit neznámé tagy
                     }
                 }
                 eventType = parser.next()
             }
-            // Vrací instanci datové třídy SaltResponse
             return SaltResponse(status ?: "FATAL", salt, code, message)
 
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e(TAG, "Chyba při parsování SaltResponse XML: ${e.message}")
-            // V případě chyby parsování vrátit chybový objekt
             return SaltResponse("FATAL", null, null, "Chyba při parsování XML: ${e.message}")
         }
     }
 
-    // Parsuje XML odpověď z /api/login/
+    // Parsuje XML odpověď z /api/login/ na LoginResponse
     fun parseLoginResponseXml(xmlString: String): LoginResponse {
         try {
             val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
@@ -97,26 +96,24 @@ object XmlUtils {
                     when (parser.name) {
                         "status" -> status = readText(parser)
                         "token" -> token = readText(parser)
-                        "code" -> code = readText(parser).toIntOrNull() // Pokusit se parsovat na Int
+                        "code" -> code = readText(parser).toIntOrNull()
                         "message" -> message = readText(parser)
+                        else -> skip(parser) // Přeskočit neznámé tagy
                     }
                 }
                 eventType = parser.next()
             }
-            // Vrací instanci datové třídy LoginResponse
             return LoginResponse(status ?: "FATAL", token, code, message)
 
         } catch (e: Exception) {
             e.printStackTrace()
             Log.e(TAG, "Chyba při parsování LoginResponse XML: ${e.message}")
-            // V případě chyby parsování vrátit chybový objekt
             return LoginResponse("FATAL", null, null, "Chyba při parsování XML: ${e.message}")
         }
     }
 
 
-    // Parsuje XML odpověď z /api/logout/
-    // Podle API dokumentace vrací jen status OK/ERROR/FATAL v kořenovém tagu <status>
+    // Parsuje XML odpověď z /api/logout/ na status String
     fun parseLogoutResponseXml(xmlString: String): String { // Vrací jen String status
         try {
             val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
@@ -143,7 +140,7 @@ object XmlUtils {
     }
 
 
-    // Parsuje XML odpověď z /api/search/
+    // Parsuje XML odpověď z /api/search/ na SearchResponse
     fun parseSearchResponseXml(xmlString: String): SearchResponse {
         val filesList = mutableListOf<FileModel>() // Seznam pro ukládání nalezených FileModel
         var status: String? = null
@@ -187,6 +184,7 @@ object XmlUtils {
                             "positive_votes" -> currentFile = currentFile?.copy(positive_votes = readText(parser).toIntOrNull() ?: 0)
                             "negative_votes" -> currentFile = currentFile?.copy(negative_votes = readText(parser).toIntOrNull() ?: 0)
                             "password" -> currentFile = currentFile?.copy(password = readText(parser).toIntOrNull() ?: 0)
+                            else -> skip(parser) // Přeskočit neznámé tagy
                         }
                     }
                     XmlPullParser.END_TAG -> {
@@ -200,6 +198,7 @@ object XmlUtils {
                             }
                         }
                     }
+                    else -> skip(parser) // Přeskočit neznámé tagy
                 }
                 eventType = parser.next()
             }
@@ -215,7 +214,7 @@ object XmlUtils {
     }
 
 
-    // Parsuje XML odpověď z /api/file_link/
+    // Parsuje XML odpověď z /api/file_link/ na FileLinkResponse
     fun parseFileLinkResponseXml(xmlString: String): FileLinkResponse {
         try {
             val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
@@ -235,6 +234,7 @@ object XmlUtils {
                             "link" -> link = readText(parser)
                             "code" -> code = readText(parser).toIntOrNull()
                             "message" -> message = readText(parser)
+                            else -> skip(parser) // Přeskočit neznámé tagy
                         }
                     }
                 }
@@ -252,11 +252,9 @@ object XmlUtils {
     }
 
 
-    // Parsuje XML odpověď z /api/user_data/
+    // Parsuje XML odpověď z /api/user_data/ na UserDataResponse
     fun parseUserDataResponseXml(xmlString: String): UserDataResponse {
-        // TODO: Implementujte robustní parsovací logiku XML pro UserDataResponse
-        // Zkontrolujte, jak se jmenují tagy v XML odpovědi z API a extrahujte hodnoty.
-        // Názvy tagů se MUSÍ shodovat s těmi v XML.
+        // TODO: Zkontrolujte, jak se jmenují tagy v XML odpovědi z API pro user_data
         try {
             val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = true }
             val parser = factory.newPullParser().apply { setInput(StringReader(xmlString)) }
@@ -313,8 +311,7 @@ object XmlUtils {
                             "email_verified" -> email_verified = readText(parser)
                             "code" -> code = readText(parser).toIntOrNull()
                             "message" -> message = readText(parser)
-                            // Přeskočit neznámé tagy uvnitř response, pokud existují
-                            else -> skip(parser) // Přeskočí celý podstrom neznámého tagu
+                            else -> skip(parser) // Přeskočit neznámé tagy
                         }
                     }
                 }
@@ -373,6 +370,6 @@ object XmlUtils {
 
 }
 
-// Potřebujeme import pro XmlPullParserException, která je v jiném paketu
+// Import pro XmlPullParserException, která je v jiném paketu
 // import org.xmlpull.v1.XmlPullParserException
 // Přidáno na začátek souboru.

@@ -14,26 +14,28 @@ class AuthTokenManager(context: Context) {
     // Klíče pro ukládání dat v SharedPreferences
     private val PREF_AUTH_TOKEN = "auth_token"
     private val PREF_USERNAME = "username"
-    private val PREF_PASSWORD = "password" // Ukládáme plain heslo, zvažte šifrování pro vyšší bezpečnost
+    private val PREF_PASSWORD = "password" // Ukládáme plain heslo, zvažte šifrování pro produkční app
+
+    private val TAG = "AuthTokenManager" // Logovací tag
 
     // --- Správa autentizačního tokenu ---
 
     // Uloží autentizační token
     fun saveToken(token: String) {
-        Log.d("AuthTokenManager", "Saving token")
+        Log.d(TAG, "Saving token")
         prefs.edit().putString(PREF_AUTH_TOKEN, token).apply()
     }
 
     // Načte autentizační token
     fun getAuthToken(): String? {
         val token = prefs.getString(PREF_AUTH_TOKEN, null)
-        Log.d("AuthTokenManager", "Token retrieved: ${if (token != null) "${token.length} characters" else "null"}")
+        Log.d(TAG, "Token retrieved: ${if (token != null) "${token.length} characters" else "null"}")
         return token
     }
 
-    // Smaže autentizační token
+    // **Smaže autentizační token** - Volá se z Repository
     fun clearToken() {
-        Log.d("AuthTokenManager", "Clearing token")
+        Log.d(TAG, "Clearing token")
         prefs.edit().remove(PREF_AUTH_TOKEN).apply()
     }
 
@@ -41,7 +43,7 @@ class AuthTokenManager(context: Context) {
 
     // Uloží uživatelské jméno a heslo
     fun saveCredentials(username: String, passwordHash: String) { // Očekává HASH hesla
-        Log.d("AuthTokenManager", "Saving credentials")
+        Log.d(TAG, "Saving credentials")
         prefs.edit()
             .putString(PREF_USERNAME, username)
             .putString(PREF_PASSWORD, passwordHash) // Ukládá hash
@@ -53,7 +55,7 @@ class AuthTokenManager(context: Context) {
     fun loadCredentials(): Pair<String, String>? {
         val username = prefs.getString(PREF_USERNAME, null)
         val passwordHash = prefs.getString(PREF_PASSWORD, null) // Načítá hash
-        Log.d("AuthTokenManager", "Credentials loaded: username=${username != null}, passwordHash=${passwordHash != null}")
+        Log.d(TAG, "Credentials loaded: username=${username != null}, passwordHash=${passwordHash != null}")
 
         return if (username != null && passwordHash != null) {
             Pair(username, passwordHash)
@@ -62,9 +64,9 @@ class AuthTokenManager(context: Context) {
         }
     }
 
-    // Smaže uložené uživatelské jméno a heslo
+    // **Smaže uložené uživatelské jméno a heslo** - Volá se z Repository
     fun clearCredentials() {
-        Log.d("AuthTokenManager", "Clearing credentials")
+        Log.d(TAG, "Clearing credentials")
         prefs.edit()
             .remove(PREF_USERNAME)
             .remove(PREF_PASSWORD)
@@ -73,7 +75,7 @@ class AuthTokenManager(context: Context) {
 
     // Pomocná metoda pro smazání VŠECH uložených dat (token i credentials)
     fun clearAll() {
-        Log.d("AuthTokenManager", "Clearing all authentication data")
+        Log.d(TAG, "Clearing all authentication data")
         prefs.edit().clear().apply()
     }
 }

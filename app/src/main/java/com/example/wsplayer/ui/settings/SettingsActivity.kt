@@ -1,22 +1,27 @@
 // app/src/main/java/com/example/wsplayer/ui/settings/SettingsActivity.kt
 package com.example.wsplayer.ui.settings // Váš balíček pro SettingsActivity - ZKONTROLUJTE
 
-import android.content.Context
-import android.content.Intent
+import android.content.Context // Import pro Context
+import android.content.Intent // Import pro Intent
 import android.os.Bundle
-import android.view.View
-import android.widget.Toast
+import android.view.View // Import pro View
+import android.widget.Toast // Import pro Toast zprávy
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer // Nechat pokud používáte Observer { } syntaxi, jinak smazat
 import androidx.lifecycle.ViewModelProvider
-import com.example.wsplayer.data.api.WebshareApiService
+
 // Import pro MainActivity (pro přesměrování zpět) (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.MainActivity
+
 import com.example.wsplayer.R // Import pro string resources
+
 // Importy pro ViewModel a Factory (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.ui.search.SearchViewModel // ViewModel se logout logikou
 import com.example.wsplayer.ui.search.SearchViewModelFactory // Factory pro SearchViewModel
+
 // Import pro View Binding (vygenerovaná třída) (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.databinding.ActivitySettingsBinding
+
 
 // Activity pro obrazovku nastavení
 // Obsahuje tlačítko pro odhlášení
@@ -52,9 +57,10 @@ class SettingsActivity : AppCompatActivity() {
         // **Získání instance SearchViewModelu pomocí Factory**
         // Použijte stejnou Factory jako SearchActivity.
         // Předpokládáme, že SearchViewModelFactory přijímá Context a ApiService a vytváří Repository.
-        val apiService = WebshareApiService.create() // Zkontrolujte cestu k ApiService
-        val viewModelFactory = SearchViewModelFactory(applicationContext, apiService) // Zkontrolujte cestu k Factory
-        viewModel = ViewModelProvider(this, viewModelFactory).get(SearchViewModel::class.java) // Získání SearchViewModelu
+        // Zkontrolujte cesty k ApiService a Factory
+        val apiService = com.example.wsplayer.data.api.WebshareApiService.create() // Zkontrolujte cestu k ApiService
+        val viewModelFactory = com.example.wsplayer.ui.search.SearchViewModelFactory(applicationContext, apiService) // Zkontrolujte cestu k Factory
+        viewModel = ViewModelProvider(this, viewModelFactory).get(com.example.wsplayer.ui.search.SearchViewModel::class.java) // Získání SearchViewModelu
         println("SettingsActivity: ViewModel (SearchViewModel) získán.")
 
 
@@ -93,6 +99,15 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // TODO: Přidejte další UI prvky a logiku pro nastavení zde...
+        // Např. zobrazit info o uživateli z ViewModelu, atd.
+        // SearchViewModel obsahuje LiveData pro uživatelská data, pokud jste ji implementoval(a).
+        /*
+        viewModel.userData.observe(this) { userData ->
+            // Aktualizujte UI SettingsActivity s detaily o uživateli
+        }
+        */
+
+        println("SettingsActivity: <<< onCreate dokončen.")
     }
 
     override fun onDestroy() {
@@ -104,4 +119,5 @@ class SettingsActivity : AppCompatActivity() {
 
     // TODO: SettingsActivity potřebuje svůj vlastní layout activity_settings.xml
     // který obsahuje UI prvky jako je tlačítko Odhlásit se (s odpovídajícím ID buttonLogout).
+    // Ujistěte se, že máte povolený View Binding pro activity_settings.xml v build.gradle.
 }

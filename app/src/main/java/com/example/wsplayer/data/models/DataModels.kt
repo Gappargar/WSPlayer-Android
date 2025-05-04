@@ -1,7 +1,7 @@
 // app/src/main/java/com/example/wsplayer/data/models/DataModels.kt
 package com.example.wsplayer.data.models // Váš balíček - ZKONTROLUJTE, musí být správně!
 
-// Tento soubor obsahuje VŠECHNY datové třídy pro API odpovědi a stavy UI
+// Tento soubor by měl obsahovat VŠECHNY datové třídy pro API odpovědi a stavy UI
 
 // Datová třída pro odpověď z /api/salt/
 data class SaltResponse(
@@ -66,7 +66,7 @@ data class UserDataResponse(
     val score_bytes: String?, // Velikost stažených souborů
     val private_files: String?, // Počet soukromých souborů
     // **OPRAVA: Odstranit jednu z duplicitních deklarací pro private_space/private_bytes**
-    val private_bytes: String?, // Velikost soukromých souborů - Ponechat tuto
+    val private_bytes: String?, // Velikost soukromých souborů
     val private_space: String?, // Velikost soukromého prostoru
     val tester: String?, // Tester
     val vip: String?, // VIP
@@ -86,7 +86,7 @@ sealed class SearchState {
     object Idle : SearchState() // Počáteční stav nebo po dokončení vyhledávání
     object Loading : SearchState() // Vyhledávání probíhá (první stránka)
     data class Success(val results: List<FileModel>, val totalResults: Int) : SearchState() // Úspěch s výsledky (používá FileModel)
-    // **Zkontrolujte, že máte PŘESNĚ tento řádek:**
+    // POZOR: V DataModels jste měl(a) Error. Zůstaneme u Error, jak se používá v SearchActivity/ViewModel
     data class Error(val message: String) : SearchState() // Chyba (nese zprávu)
     object EmptyResults : SearchState() // Nalezeno 0 výsledků
     object LoadingMore : SearchState() // Načítání dalších stránek
@@ -98,7 +98,7 @@ sealed class FileLinkState {
     object LoadingLink : FileLinkState() // Získávání odkazu probíhá
     data class LinkSuccess(val fileUrl: String) : FileLinkState() // Odkaz úspěšně získán (nese URL)
     // Pokud v kódu SearchActivity a SearchViewModel používáte LinkError,
-    // je potřeba ho tak pojmenovat i zde.
+    // je potřeba ho tak pojmenovat i zde. Zůstaneme u Error.
     data class Error(val message: String) : FileLinkState() // Chyba při získání odkazu (nese zprávu)
     // Poznámka: V předchozí verzi jsem navrhoval LinkError, ale ve vašem kódu se jmenoval jen Error.
     // Důležité je, aby se název zde SHODOVAL s tím, co používáte ve SearchActivity a SearchViewModel
