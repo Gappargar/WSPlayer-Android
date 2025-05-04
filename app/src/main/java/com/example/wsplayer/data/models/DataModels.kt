@@ -20,24 +20,25 @@ data class LoginResponse(
 )
 
 // Datová třída pro jeden nalezený soubor ve výsledcích vyhledávání (POUŽÍVANÁ V UI)
-data class FileModel( // <- TOTO JE FileModel, ne FileItem!
-    val ident: String,
-    val name: String,
-    val type: String,
+data class FileModel( // <- TOTO JE FileModel
+    val ident: String, // Unikátní ID souboru (použijeme pro získání odkazu)
+    val name: String, // Název souboru
+    val type: String, // Typ souboru (např. "video")
     val img: String?, // URL náhledu
-    val stripe: String?,
-    val stripe_count: Int?,
+    val stripe: String?, // Informace o pruhu
+    val stripe_count: Int?, // Počet pruhů
     val size: Long, // Velikost v bytech
-    val queued: Int,
-    val positive_votes: Int,
-    val negative_votes: Int,
-    val password: Int // 0=Ne, 1=Ano
+    val queued: Int, // Počet ve frontě
+    val positive_votes: Int, // Kladné hlasy
+    val negative_votes: Int, // Záporné hlasy
+    val password: Int // 0=Ne, 1=Ano - DŮLEŽITÉ pro zjištění, zda potřebuje heslo k odkazu
+    // Přidejte další vlastnosti z API odpovědi, pokud je potřebujete
 )
 
 // Datová třída pro celou odpověď z /api/search/ (RAW API ODPOVĚĎ)
 data class SearchResponse(
     val status: String,
-    val total: Int, // Celkový počet výsledků
+    val total: Int, // Celkový počet výsledků pro daný dotaz
     val files: List<FileModel>?, // Seznam nalezených souborů (tag <file> se opakuje)
     val code: Int?,
     val message: String?
@@ -46,7 +47,7 @@ data class SearchResponse(
 // Datová třída pro odpověď z /api/file_link/ (RAW API ODPOVĚĎ)
 data class FileLinkResponse(
     val status: String, // "OK", "FATAL"
-    val link: String?, // Přímá URL pro přehrávání/stažení
+    val link: String?, // Přímá URL pro přehrávání/stažení, pokud status je "OK"
     val code: Int?,     // Kód chyby
     val message: String? // Popis chyby
 )
@@ -63,9 +64,12 @@ data class UserDataResponse(
     val bytes: String?, // Velikost souborů
     val score_files: String?, // Stažené soubory
     val score_bytes: String?, // Velikost stažených souborů
-    val private_space: String?, // Soukromý prostor
+    val private_files: String?, // Počet soukromých souborů
+    // POZOR: Zdá se, že 'private_space' je v API docs/vašem kódu 2x definováno.
+    // Pravděpodobně se jedná o překlep v dokumentaci nebo v XML. Zkontrolujte XML odpověď.
+    // Ponecháme jen jednu definici pro 'private_space'.
     val private_bytes: String?, // Velikost soukromých souborů
-    val private_space: String?, // Velikost soukromého prostoru (pozor, duplicitní název v API docs?)
+    val private_space: String?, // Velikost soukromého prostoru
     val tester: String?, // Tester
     val vip: String?, // VIP
     val vip_days: String?, // VIP dny
@@ -73,11 +77,13 @@ data class UserDataResponse(
     val vip_minutes: String?, // VIP minuty
     val vip_until: String?, // VIP do
     val email_verified: String?, // Email ověřen
-    val code: Int?, // Kód chyby
-    val message: String? // Popis chyby
+    val code: Int?, // Kód chyby (pro stav FATAL)
+    val message: String? // Popis chyby (pro stav FATAL)
 )
 
-// **Sealed class reprezentující RŮZNÉ STAVY PROCESU VYHL**E**DÁVÁNÍ SOUBORŮ (STAVY UI pro ViewModel/Activity)**
+// TODO: Přidat datové třídy pro další API odpovědi (např. file_password_salt)
+
+// **Sealed class reprezentující RŮZNÉ STAVY PROCESU VYHLEDÁVÁNÍ SOUBORŮ (STAVY UI pro ViewModel/Activity)**
 sealed class SearchState {
     object Idle : SearchState() // Počáteční stav nebo po dokončení vyhledávání
     object Loading : SearchState() // Vyhledávání probíhá (první stránka)
@@ -92,10 +98,8 @@ sealed class FileLinkState {
     object Idle : FileLinkState() // Počáteční stav
     object LoadingLink : FileLinkState() // Získávání odkazu probíhá
     data class LinkSuccess(val fileUrl: String) : FileLinkState() // Odkaz úspěšně získán (nese URL)
-    data class Error(val message: String) : FileLinkState() // Chyba (nese zprávu)
-    // Poznámka: Pokud byste chtěl(a) stav LinkError explicitně, přejmenujte toto na LinkError
-    // a opravte to i v SearchActivity a SearchViewModel. Nyní se stav jmenuje Error.
+    // POZOR: Ve vašem DataModels.kt se tento stav jmenoval jen Error.
+    // Pokud v kódu SearchActivity a SearchViewModel používáte LinkError,
+    // je potřeba ho tak pojmenovat i zde. Zůstaneme u LinkError.
+    data class LinkError(val message: String) : FileLinkState() // Chyba při získání odkazu (nese zprávu)
 }
-
-// TODO: Přidat datové třídy pro další API odpovědi (např. file_password_salt)
-// TODO: Zkontrolovat UserDataResponse - zdá se, že 'private_space' je 2x definováno v API docs/vašem kódu.

@@ -9,12 +9,18 @@ import androidx.lifecycle.viewModelScope // Pro práci s coroutines ve ViewModel
 // **Import Repository**
 import com.example.wsplayer.data.repository.WebshareRepository
 
+// **Import pro utility pro hašování a parsování XML**
+import com.example.wsplayer.utils.HashingUtils
+import com.example.wsplayer.utils.XmlUtils // Pokud se parsuje přímo zde
+
 // **Import pro modelové třídy a stavy**
 // ZKONTROLUJTE, že cesta odpovídá vašemu umístění DataModels.kt
 import com.example.wsplayer.data.models.UserDataResponse // Používá se při načítání uživatelských dat
 import com.example.wsplayer.data.models.LoginResponse // Používá se pro parsování login odpovědi (uvnitř Repository)
+import com.example.wsplayer.data.models.SaltResponse // Používá se pro parsování salt odpovědi (uvnitř Repository)
 
-import kotlinx.coroutines.Dispatchers // Pro přepnutí kontextu (background vlákna)
+
+import kotlinx.coroutines.Dispatchers // Pro background vlákna
 import kotlinx.coroutines.launch // Pro spouštění coroutines
 import kotlinx.coroutines.withContext // Pro přepnutí kontextu uvnitř coroutine
 
@@ -27,8 +33,9 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
     // --- Stavy pro UI (LiveData) ---
 
     // Sealed class reprezentující různé stavy procesu přihlašování
-    // Definovaná přímo zde, pokud ji nepoužíváte jinde
-    // Pokud ji používáte jinde, měla by být v data.models a zde naimportována
+    // Definovaná přímo zde, protože se primárně týká stavu LoginActivity
+    // Pokud ji používáte i jinde (např. v SettingsActivity pro logout signalizaci),
+    // měla by být v data.models a zde naimportována.
     sealed class LoginState {
         object Idle : LoginState() // Počáteční stav / zobrazení formuláře
         object Loading : LoginState() // Probíhá přihlašování / auto-login
@@ -68,26 +75,25 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
 
         viewModelScope.launch {
             println("LoginViewModel: Spouštím auto-login coroutine.") // Log
-            val credentials = repository.loadCredentials() // Načíst uložené credentials
+            val credentials = repository.loadCredentials() // Načíst uložené credentials (Pair<username, passwordHash>?)
 
             if (credentials != null) {
                 val (username, passwordHash) = credentials
-                println("LoginViewModel: Nalezeny uložené credentials. Pokouším se přihlásit s WST tokenem.") // Log
-                // TODO: Místo celého login procesu zde, zkusit POUZE ověřit token, pokud existuje.
-                // LoginRepository by měla mít metodu pro ověření tokenu.
-                // Prozatím zkusíme celý login proces (který získá nový token, pokud je starý neplatný)
+                println("LoginViewModel: Nalezeny uložené credentials. Pokouším se přihlásit s těmito údaji.") // Log
+
+                // Pokusíme se přihlásit v Repository (která použije hash a získá/uloží token)
                 val loginResult = repository.login(username, passwordHash) // Použít login metodu z Repository
 
                 if (loginResult.isSuccess) {
                     val token = loginResult.getOrThrow()
-                    // Při úspěchu auto-loginu není potřeba credentials ukládat (už uložené jsou)
+                    // Při úspěchu auto-loginu credentials již uložené jsou, token byl uložen v Repository
                     println("LoginViewModel: Auto-login úspěšný s tokenem.") // Log
-                    loadUserData() // Načíst uživatelská data
+                    loadUserData() // Načíst uživatelská data po úspěšném auto-loginu
                     _loginState.postValue(LoginState.Success(token)) // Nastavit stav na úspěch
                 } else {
                     println("LoginViewModel: Auto-login selhal. ${loginResult.exceptionOrNull()?.message}. Mažu credentials a zobrazuji formulář.") // Log
                     repository.clearCredentials() // Při selhání auto-loginu smazat neplatné credentials
-                    _loginState.postValue(LoginState.Error("Automatické přihlášení selhalo: ${loginResult.exceptionOrNull()?.message}")) // Nastavit stav chyby
+                    _loginState.postValue(LoginState.Error("Automatické přihlášení selhalo: ${loginResult.exceptionOrNull()?.message}")) // Nastavit stav chyby s informací o selhání
                     // _loginState.postValue(LoginState.Idle) // Možná rovnou přejít do Idle po chybě?
                 }
             } else {
@@ -155,6 +161,7 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
                 println("LoginViewModel: Repository.login úspěšný.") // Log
 
                 // **Fáze 4: Správa lokálních dat na základě rememberMe**
+                // Repository již uložila token. Zde uložíme/smažeme credentials podle checkboxu.
                 if (rememberMe) {
                     // Uživatel si přál být zapamatován - uložit credentials (username + hash)
                     println("LoginViewModel: Checkbox 'Zapamatovat si mě' byl true. Ukládám credentials...") // Log
@@ -185,6 +192,7 @@ class LoginViewModel(private val repository: WebshareRepository) : ViewModel() {
     // Načte uživatelská data pomocí tokenu z Repository a případně aktualizuje LiveData
     fun loadUserData() { // Volá se po úspěšném auto-loginu nebo manuálním loginu
         println("LoginViewModel: loadUserData() volán.") // Log
+        // Kontrola přihlášení zde není nutná, volá se to po úspěšném přihlášení, kde víme, že token máme.
         viewModelScope.launch {
             val userDataResult = repository.getUserData() // Volání getUserData z Repository
 

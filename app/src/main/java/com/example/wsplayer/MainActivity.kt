@@ -13,11 +13,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer // Nechat pokud používáte Observer { } syntaxi, jinak smazat
 import androidx.lifecycle.ViewModelProvider
 
-// Importy pro ViewModel a Factory
-import com.example.wsplayer.ui.auth.LoginViewModel // Import LoginViewModel
-import com.example.wsplayer.ui.auth.LoginViewModelFactory // Import LoginViewModelFactory
+// Importy pro ViewModel a Factory (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.ui.auth.LoginViewModel
+import com.example.wsplayer.ui.auth.LoginViewModelFactory
 
-// Importy pro Repository, AuthTokenManager, ApiService - potřeba pro Factory
+// Importy pro Repository, AuthTokenManager, ApiService - potřeba pro Factory volání (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.data.repository.WebshareRepository
 import com.example.wsplayer.AuthTokenManager // Import AuthTokenManager
 import com.example.wsplayer.data.api.WebshareApiService // Import ApiService
@@ -25,11 +25,14 @@ import com.example.wsplayer.data.api.WebshareApiService // Import ApiService
 // Import pro datové třídy a stavy, pokud je MainActivity přímo používá (obvykle ne, ale pro jistotu)
 // import com.example.wsplayer.data.models.* // Pokud zde přímo používáte např. UserDataResponse
 
-// Import pro SearchActivity (pro přesměrování)
+// Import pro SearchActivity (pro přesměrování) (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.ui.search.SearchActivity
 
 // Import pro R třídu (pro string resources)
 import com.example.wsplayer.R
+
+// Import pro View Binding (vygenerovaná třída) (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.databinding.ActivityMainBinding
 
 
 // Hlavní aktivita aplikace - slouží jako přihlašovací obrazovka
@@ -47,18 +50,16 @@ class MainActivity : AppCompatActivity() {
         println("MainActivity: >>> onCreate spuštěn. PID: ${android.os.Process.myPid()}") // Log
 
         // --- Nastavení uživatelského rozhraní pomocí View Bindingu ---
-        // Předpokládá, že máte activity_main.xml a v něm povolený View Binding
-        // import com.example.wsplayer.databinding.ActivityMainBinding se provede automaticky
         binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(binding.root) // Použití binding.root
         println("MainActivity: ContentView nastaven.")
 
 
         // --- Inicializace ViewModelu pomocí Factory ---
-        // Vytvoříme instanci ApiService a Repository (zde nebo v Factory)
         // Factory si sama vytvoří Repository (a uvnitř i AuthTokenManager).
-        val apiService = WebshareApiService.create() // Vytvoří instanci ApiService
-        val viewModelFactory = LoginViewModelFactory(applicationContext, apiService) // Factory pro LoginViewModel
+        // Potřebuje k tomu Context a ApiService.
+        val apiService = WebshareApiService.create() // Vytvoří instanci ApiService (ZKONTROLUJTE)
+        val viewModelFactory = LoginViewModelFactory(applicationContext, apiService) // Factory pro LoginViewModel (ZKONTROLUJTE CESTU)
         viewModel = ViewModelProvider(this, viewModelFactory).get(LoginViewModel::class.java) // Získání ViewModelu
 
 
@@ -120,7 +121,7 @@ class MainActivity : AppCompatActivity() {
 
                     // --- Přejít na SearchActivity a vymazat Task ---
                     println("MainActivity: Spouštím SearchActivity s flags NEW_TASK | CLEAR_TASK.") // Log
-                    val intent = Intent(this, SearchActivity::class.java)
+                    val intent = Intent(this, SearchActivity::class.java) // Intent pro SearchActivity (ZKONTROLUJTE CESTU)
                     // Tyto flags zajistí, že SearchActivity se stane novým kořenem Tasku
                     // a původní Task (s LoginActivity) bude vymazán.
                     intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -179,7 +180,7 @@ class MainActivity : AppCompatActivity() {
 
             // Volitelně: skrýt klávesnici po kliknutí na tlačítko
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
+            imm.hideSoftInputFromWindow(binding.root.windowToken, 0) // Používání binding.root.windowToken
             println("MainActivity: Klávesnice skryta.") // Log
         }
 
@@ -197,7 +198,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         println("MainActivity: >>> onDestroy spuštěn.") // Log
         // Zde můžete uvolnit zdroje, které byly alokovány specificky pro tuto Activity
-        // např. zrušit registraci BroadcastReceiverů, pokud nějaké máte
         super.onDestroy()
         println("MainActivity: <<< onDestroy dokončen.") // Log
     }
