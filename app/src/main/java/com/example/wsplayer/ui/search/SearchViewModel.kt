@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/wsplayer/ui/search/SearchViewModel.kt
 package com.example.wsplayer.ui.search // Váš balíček pro SearchViewModel - ZKONTROLUJTE
 
 import androidx.lifecycle.LiveData
@@ -30,75 +29,51 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
 
     // --- Stavy pro UI (LiveData) ---
 
-    // Stav aktuálního vyhledávání (Idle, Loading, Success, Error, Empty, LoadingMore)
     private val _searchState = MutableLiveData<SearchState>(SearchState.Idle)
-    val searchState: LiveData<SearchState> = _searchState // Activity sleduje tento LiveData
+    val searchState: LiveData<SearchState> = _searchState
 
-    // Stav získávání odkazu na soubor (Idle, LoadingLink, LinkSuccess, Error)
-    // Předpokládáme, že ve vašem DataModels.kt máte FileLinkState.Error (pokud LinkError, použijte LinkError)
-    private val _fileLinkState = MutableLiveData<FileLinkState>(FileLinkState.Idle) // Používá FileLinkState z models
-    val fileLinkState: LiveData<FileLinkState> = _fileLinkState // Activity sleduje tento LiveData
+    private val _fileLinkState = MutableLiveData<FileLinkState>(FileLinkState.Idle)
+    val fileLinkState: LiveData<FileLinkState> = _fileLinkState
 
-    // Indikátor načítání (pro vyhledávání a stránkování)
     private val _isLoading = MutableLiveData<Boolean>(false)
-    val isLoading: LiveData<Boolean> = _isLoading // Activity sleduje tento LiveData (ProgressBar)
+    val isLoading: LiveData<Boolean> = _isLoading
 
-    // Seznam nalezených souborů pro zobrazení v RecyclerView
-    private val _searchResults = MutableLiveData<List<FileModel>>(emptyList()) // Seznam typu FileModel
-    val searchResults: LiveData<List<FileModel>> = _searchResults // Activity sleduje tento LiveData (Adapter)
+    private val _searchResults = MutableLiveData<List<FileModel>>(emptyList())
+    val searchResults: LiveData<List<FileModel>> = _searchResults
 
-    // Celkový počet nalezených výsledků (pro informaci o stránkování)
     private val _totalResults = MutableLiveData<Int>(0)
-    val totalResults: LiveData<Int> = _totalResults // Activity může zobrazit celkový počet
+    val totalResults: LiveData<Int> = _totalResults
 
-    // **Stav přihlášení uživatele - KLÍČOVÉ pro SearchActivity**
-    // Tato LiveData signalizuje Activity, zda je uživatel přihlášen (má platný token)
     private val _isUserLoggedIn = MutableLiveData<Boolean>()
-    val isUserLoggedIn: LiveData<Boolean> = _isUserLoggedIn // Activity sleduje tuto LiveData pro rozhodnutí o navigaci
+    val isUserLoggedIn: LiveData<Boolean> = _isUserLoggedIn
 
 
     // --- Proměnné pro správu stavu ---
     private var currentSearchQuery: String = ""
-    private var currentSearchCategory: String = ""
-    private var currentPage: Int = 0 // Aktuální načtená stránka výsledků
-    private val resultsPerPage = 20 // Počet výsledků na stránku (ověřte dle API)
+    private var currentSearchCategory: String? = null
+    private var currentSortOrder: String? = null
+    private var currentPage: Int = 0 // Stránky jsou obvykle indexovány od 0 pro výpočet offsetu
+    private val resultsPerPage = 20 // Toto je náš 'limit'
 
 
-    // Inicializační blok - spustí se při prvním vytvoření ViewModelu
-    // Toto se stane, když se poprvé spustí SearchActivity v novém Tasku
     init {
         Log.d(TAG, "Init blok spuštěn. PID: ${android.os.Process.myPid()}")
-
-        // **Při vytvoření ViewModelu zkontrolujte, zda je dostupný TOKEN**
-        // Toto je správný způsob, jak ověřit, zda je uživatel "technicky" přihlášen (má token)
-        viewModelScope.launch(Dispatchers.IO) { // Spustit kontrolu v background vlákně
+        viewModelScope.launch(Dispatchers.IO) {
             Log.d(TAG, "Provádím kontrolu tokenu v init bloku.")
-            val token = repository.getAuthToken() // Získat token z Repository
-
-            // Nastavit stav přihlášení na základě existence tokenu
-            val isLoggedIn = (token != null && token.isNotEmpty()) // Zkontrolovat, zda je token ne-null a neprázdný
-            _isUserLoggedIn.postValue(isLoggedIn) // postValue je bezpečné z background vlákna
-
-            Log.d(TAG, "Kontrola tokenu dokončena. isUserLoggedIn: ${isUserLoggedIn.value}")
-
-            // Pokud je uživatel přihlášen (má token), můžete zde spustit prvotní načtení dat,
-            // např. načtení posledních souborů nebo info o uživateli.
+            val token = repository.getAuthToken()
+            val isLoggedIn = (token != null && token.isNotEmpty())
+            _isUserLoggedIn.postValue(isLoggedIn)
+            Log.d(TAG, "Kontrola tokenu dokončena. isUserLoggedIn: $isLoggedIn")
             if (isLoggedIn) {
-                // TODO: Volitelně spustit prvotní načtení dat po úspěšné kontrole tokenu
-                // napr. loadDefaultSearch()
-                // loadUserData() // Příklad: načíst info o uživateli hned po startu SearchActivity
+                // loadUserData()
             } else {
-                // Pokud token neexistuje při startu SearchViewModelu, Activity se přesměruje observerem
                 Log.d(TAG, "Token nenalezen při startu ViewModelu - Activity by se měla přesměrovat.")
             }
         }
     }
 
-    // --- Metody pro logiku obrazovky ---
-
-    // Metoda pro spuštění nového vyhledávání
-    fun search(query: String, category: String = "") {
-        Log.d(TAG, "search() volán s dotazem: '$query', kategorií: '$category'")
+    fun search(query: String, category: String?, sort: String? = null) {
+        Log.d(TAG, "search() volán s dotazem: '$query', kategorií: '$category', řazením: '$sort'")
         if (query.isEmpty()) {
             _searchState.postValue(SearchState.Idle)
             _searchResults.postValue(emptyList())
@@ -107,49 +82,56 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
             return
         }
 
-        // **Přidat kontrolu přihlášení před spuštěním vyhledávání**
-        // Vyhledávání má smysl pouze pokud je uživatel přihlášen (má token)
         if (isUserLoggedIn.value != true) {
             Log.e(TAG, "Pokus o vyhledávání bez platného tokenu. Nastavuji Error stav.")
-            _searchState.postValue(SearchState.Error("Pro vyhledávání je vyžadováno přihlášení.")) // Používá SearchState.Error
+            _searchState.postValue(SearchState.Error("Pro vyhledávání je vyžadováno přihlášení."))
             _searchResults.postValue(emptyList())
             _totalResults.postValue(0)
-            return // Nepokračovat ve vyhledávání bez přihlášení
+            return
         }
 
-        // Pokud už už načítáme, nezačínat nové vyhledávání (dokud se to nedokončí)
         if (_isLoading.value == true) {
             Log.d(TAG, "Již probíhá načítání, přeskakuji nové vyhledávání.")
             return
         }
 
-
         currentSearchQuery = query
         currentSearchCategory = category
-        currentPage = 0 // Při novém vyhledávání začínáme vždy od první stránky
-        _searchResults.postValue(emptyList()) // Vyčistit předchozí výsledky
-        _totalResults.postValue(0) // Resetovat celkový počet
+        currentSortOrder = sort
+        currentPage = 0 // Při novém vyhledávání vždy začínáme od první stránky (pro výpočet offsetu)
+        _searchResults.postValue(emptyList())
+        _totalResults.postValue(0)
 
-        _isLoading.postValue(true) // Začínáme načítat
-        _searchState.postValue(SearchState.Loading) // Nastavit stav načítání (první stránka)
+        _isLoading.postValue(true)
+        _searchState.postValue(SearchState.Loading)
 
-        viewModelScope.launch(Dispatchers.IO) { // Spustit API volání v background vlákně
-            Log.d(TAG, "Spouštím API volání pro vyhledávání - stránka $currentPage pro dotaz '$currentSearchQuery'.")
-            val result = repository.searchFiles(currentSearchQuery, currentSearchCategory, currentPage, resultsPerPage)
+        viewModelScope.launch(Dispatchers.IO) {
+            val calculatedOffset = currentPage * resultsPerPage // Výpočet offsetu
+            Log.d(TAG, "Spouštím API volání přes repository pro vyhledávání - query '$currentSearchQuery', category '$currentSearchCategory', sort '$currentSortOrder', limit '$resultsPerPage', offset '$calculatedOffset'.")
 
-            _isLoading.postValue(false) // Načítání dokončeno (nezávisle na úspěchu API volání)
+            // Předání 'sort', 'limit' a 'offset' do repository metody
+            // UJISTĚTE SE, ŽE VAŠE WebshareRepository.searchFiles() TYTO PARAMETRY PŘIJÍMÁ!
+            val result = repository.searchFiles(
+                query = currentSearchQuery,
+                category = currentSearchCategory,
+                sort = currentSortOrder,    // Předání parametru sort
+                limit = resultsPerPage,   // Předání parametru limit
+                offset = calculatedOffset // Předání parametru offset
+            )
+
+            _isLoading.postValue(false)
 
             if (result.isSuccess) {
-                val searchResponse = result.getOrThrow() // Typ SearchResponse
-                val files = searchResponse.files // Typ List<FileModel>?
-                val total = searchResponse.total // Celkový počet
+                val searchResponse = result.getOrThrow()
+                val files = searchResponse.files
+                val total = searchResponse.total
 
                 _totalResults.postValue(total)
 
                 if (files != null && files.isNotEmpty()) {
                     Log.d(TAG, "API volání vyhledávání úspěšné. Nalezeno ${files.size} na stránce, celkem $total.")
-                    _searchResults.postValue(files!!) // Použít !! zde po kontrole null
-                    _searchState.postValue(SearchState.Success(files!!, total)) // Použít !!
+                    _searchResults.postValue(files)
+                    _searchState.postValue(SearchState.Success(files, total))
                 } else {
                     Log.d(TAG, "API volání vyhledávání úspěšné, ale vráceny 0 souborů.")
                     _searchState.postValue(SearchState.EmptyResults)
@@ -157,16 +139,15 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                     _totalResults.postValue(0)
                 }
             } else {
-                Log.e(TAG, "API volání vyhledávání selhalo.")
+                Log.e(TAG, "API volání vyhledávání selhalo: ${result.exceptionOrNull()?.message}")
                 val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba"
-                _searchState.postValue(SearchState.Error(errorMessage)) // Používá SearchState.Error
+                _searchState.postValue(SearchState.Error(errorMessage))
                 _searchResults.postValue(emptyList())
                 _totalResults.postValue(0)
             }
         }
     }
 
-    // Metoda pro načtení další stránky výsledků (pro stránkování)
     fun loadNextPage() {
         Log.d(TAG, "loadNextPage() volán.")
         if (isUserLoggedIn.value != true || currentSearchQuery.isEmpty() || _isLoading.value == true) {
@@ -177,83 +158,96 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         val currentResultsCount = _searchResults.value?.size ?: 0
         val total = _totalResults.value ?: 0
 
-        if (currentResultsCount >= total || total == 0) {
+        if (currentResultsCount >= total && total > 0) {
             Log.d(TAG, "Žádné další stránky k načtení (current=$currentResultsCount, total=$total).")
             return
         }
 
-        currentPage++ // Přepnout na další stránku
+        currentPage++ // Zvýšit číslo stránky pro výpočet dalšího offsetu
         _isLoading.postValue(true)
-        _searchState.postValue(SearchState.LoadingMore) // Používá SearchState.LoadingMore
+        _searchState.postValue(SearchState.LoadingMore)
 
-        viewModelScope.launch(Dispatchers.IO) { // Spustit API volání v background vlákně
-            Log.d(TAG, "Spouštím API volání pro vyhledávání - stránka $currentPage (načítání další).")
-            val result = repository.searchFiles(currentSearchQuery, currentSearchCategory, currentPage, resultsPerPage)
+        viewModelScope.launch(Dispatchers.IO) {
+            val calculatedOffset = currentPage * resultsPerPage // Výpočet offsetu pro další stránku
+            Log.d(TAG, "Spouštím API volání přes repository (další stránka) - query '$currentSearchQuery', sort '$currentSortOrder', limit '$resultsPerPage', offset '$calculatedOffset'.")
 
-            _isLoading.postValue(false) // Načítání dokončeno
+            // Předání 'sort', 'limit' a 'offset' i zde
+            // UJISTĚTE SE, ŽE VAŠE WebshareRepository.searchFiles() TYTO PARAMETRY PŘIJÍMÁ!
+            val result = repository.searchFiles(
+                query = currentSearchQuery,
+                category = currentSearchCategory,
+                sort = currentSortOrder,    // Předání parametru sort
+                limit = resultsPerPage,   // Předání parametru limit
+                offset = calculatedOffset // Předání parametru offset
+            )
+
+            _isLoading.postValue(false)
 
             if (result.isSuccess) {
-                val searchResponse = result.getOrThrow() // Typ SearchResponse
-                val files = searchResponse.files // Typ List<FileModel>?
+                val searchResponse = result.getOrThrow()
+                val newFiles = searchResponse.files
 
-                if (files != null && files.isNotEmpty()) {
-                    Log.d(TAG, "API volání načítání další stránky úspěšné. Přidávám ${files.size} souborů.")
+                if (newFiles != null && newFiles.isNotEmpty()) {
+                    Log.d(TAG, "API volání načítání další stránky úspěšné. Přidávám ${newFiles.size} souborů.")
                     val currentList = _searchResults.value ?: emptyList()
-                    _searchResults.postValue(currentList + files!!) // Použít !! zde po kontrole null
-                    // Aktualizovat SearchState zpět na Success
-                    _searchState.postValue(SearchState.Success(currentList + files!!, _totalResults.value ?: (currentList.size + files.size))) // Použít !!
+                    val updatedList = currentList + newFiles
+                    _searchResults.postValue(updatedList)
+                    _searchState.postValue(SearchState.Success(updatedList, _totalResults.value ?: updatedList.size))
                 } else {
-                    Log.d(TAG, "API volání načítání další stránky vráceny 0 souborů.")
-                    _searchState.postValue(SearchState.Success(_searchResults.value ?: emptyList(), _totalResults.value ?: 0)) // Aktualizovat stav s nezměněným seznamem
+                    Log.d(TAG, "API volání načítání další stránky vráceny 0 nových souborů.")
+                    _searchState.postValue(SearchState.Success(_searchResults.value ?: emptyList(), _totalResults.value ?: 0))
                 }
             } else {
-                Log.e(TAG, "API volání načítání další stránky selhalo.")
+                Log.e(TAG, "API volání načítání další stránky selhalo: ${result.exceptionOrNull()?.message}")
                 val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba při načítání dalších výsledků"
-                _searchState.postValue(SearchState.Error(errorMessage)) // Používá SearchState.Error
+                _searchState.postValue(SearchState.Error(errorMessage))
             }
         }
     }
 
-    // Metoda pro získání přímého odkazu na soubor pro přehrávání
-    fun getFileLinkForFile(fileItem: FileModel) { // Přijímá FileModel
+    fun getFileLinkForFile(fileItem: FileModel) {
         Log.d(TAG, "getFileLinkForFile() volán pro ${fileItem.name}.")
         if (isUserLoggedIn.value != true) {
             Log.e(TAG, "Pokus o získání odkazu bez platného tokenu. Nastavuji Error stav.")
-            // Předpokládáme, že FileLinkState.Error se jmenuje Error v DataModels (pokud LinkError, použijte LinkError)
-            _fileLinkState.postValue(FileLinkState.Error("Pro získání odkazu je vyžadováno přihlášení.")) // <- ZKONTROLUJTE NÁZEV STAVU V DataModels.kt
+            _fileLinkState.postValue(FileLinkState.Error("Pro získání odkazu je vyžadováno přihlášení."))
             return
         }
 
-        // TODO: Pokud soubor vyžaduje heslo (fileItem.password == 1), zde by se měla spustit logika pro zadání hesla
         if (fileItem.password == 1) {
-            Log.e(TAG, "Soubor chráněn heslem - implementace chybí.")
-            // Předpokládáme, že FileLinkState.Error se jmenuje Error v DataModels
-            _fileLinkState.postValue(FileLinkState.Error("Soubor je chráněn heslem. Podpora zatím není implementována.")) // <- ZKONTROLUJTE NÁZEV STAVU ZDE
+            Log.w(TAG, "Soubor ${fileItem.name} je chráněn heslem - implementace chybí.")
+            _fileLinkState.postValue(FileLinkState.Error("Soubor je chráněn heslem. Podpora zatím není implementována."))
             return
         }
 
+        _fileLinkState.postValue(FileLinkState.LoadingLink)
 
-        _fileLinkState.postValue(FileLinkState.LoadingLink) // Používá FileLinkState.LoadingLink
-
-        viewModelScope.launch(Dispatchers.IO) { // Spustit API volání v background vlákně
+        viewModelScope.launch(Dispatchers.IO) {
             Log.d(TAG, "Spouštím API volání pro získání odkazu pro soubor s ID: ${fileItem.ident}")
-            // Předání hesla souboru, pokud je k dispozici (nyní null)
-            val result = repository.getFileLink(fileItem.ident, filePassword = null) // Používá ident z FileModel
+            val result = repository.getFileLink(fileItem.ident, filePassword = null)
 
             if (result.isSuccess) {
-                val fileUrl = result.getOrThrow() // Výsledek je String (URL odkazu)
-                Log.d(TAG, "API volání získání odkazu úspěšné. Odkaz získán.")
-                _fileLinkState.postValue(FileLinkState.LinkSuccess(fileUrl)) // Používá FileLinkState.LinkSuccess
+                val fileUrl = result.getOrThrow()
+                Log.d(TAG, "API volání získání odkazu úspěšné. Odkaz získán: $fileUrl")
+                _fileLinkState.postValue(FileLinkState.LinkSuccess(fileUrl))
             } else {
-                Log.e(TAG, "API volání získání odkazu selhalo.")
+                Log.e(TAG, "API volání získání odkazu selhalo: ${result.exceptionOrNull()?.message}")
                 val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba při získání odkazu"
-                // Předpokládáme, že FileLinkState.Error se jmenuje Error
-                _fileLinkState.postValue(FileLinkState.Error(errorMessage)) // <- ZKONTROLUJTE NÁZEV STAVU ZDE
+                _fileLinkState.postValue(FileLinkState.Error(errorMessage))
             }
         }
     }
 
-    // Metoda pro spuštění odhlášení
+    // ***** PŘIDÁNA METODA *****
+    // Metoda pro resetování stavu odkazu (volat z UI po zpracování LinkSuccess nebo Error)
+    fun resetFileLinkState() {
+        // Zkontrolujeme, zda aktuální stav není už Idle, abychom zbytečně neaktualizovali
+        if (_fileLinkState.value != FileLinkState.Idle) {
+            _fileLinkState.postValue(FileLinkState.Idle)
+            Log.d(TAG, "FileLinkState resetován na Idle.")
+        }
+    }
+
+
     fun logout() {
         Log.d(TAG, "logout() volán.")
         if (isUserLoggedIn.value != true) {
@@ -263,14 +257,10 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
 
         viewModelScope.launch(Dispatchers.IO) {
             Log.d(TAG, "Spouštím mazání tokenu a credentials v Repository.")
-            repository.clearAuthToken() // <-- Volá public metodu Repository
-            repository.clearCredentials() // <-- Volá public metodu Repository
-
-            _isUserLoggedIn.postValue(false) // Signalizovat Activity, že uživatel NENÍ přihlášen
-
+            repository.clearAuthToken()
+            repository.clearCredentials()
+            _isUserLoggedIn.postValue(false)
             Log.d(TAG, "Token a credentials smazány, isUserLoggedIn nastaven na false.")
         }
     }
-
-    // TODO: Volitelné metody jako loadDefaultSearch(), loadUserData(), atd.
 }

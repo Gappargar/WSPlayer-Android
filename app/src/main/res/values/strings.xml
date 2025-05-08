@@ -1,33 +1,59 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WSPlayer</string>
-    <string name="login_success_toast">Přihlášení úspěšné!</string>
-    <string name="login_error_message">Chyba: %s</string>
-    <string name="login_error_toast">Chyba přihlášení: %s</string>
 
-    {# String array pro kategorie vyhledávání #}
+    <string name="login_success_toast">Přihlášení bylo úspěšné!</string>
+    <string name="login_error_message">Chyba přihlášení: %s</string>
+    <string name="login_error_toast">Při přihlašování došlo k chybě.</string>
+
+    <string name="search_idle_message">Zadejte, co hledáte...</string>
+    <string name="search_success_toast">Nalezeno %1$d souborů na stránce. Celkem: %2$d.</string>
+    <string name="search_no_results_toast">Pro daný dotaz nebyly nalezeny žádné soubory.</string>
+    <string name="search_no_results_for_query">Pro zadaný dotaz nebyly nalezeny žádné soubory.</string>
+    <string name="search_error_message">Chyba při vyhledávání: %s</string>
+    <string name="search_error_toast">Chyba: %s</string>
+
+    <string name="getting_link_toast">Získávám odkaz na soubor...</string>
+    <string name="no_video_player_app_toast">Nenalezena žádná aplikace pro přehrávání videa.</string>
+    <string name="empty_link_error_toast">Chyba: Získán prázdný odkaz pro přehrávání.</string>
+    <string name="empty_link_error_message">Chyba: Byl získán prázdný odkaz pro přehrávání.</string>
+    <string name="link_error_message">Chyba při získání odkazu: %s</string>
+    <string name="link_error_toast">Chyba odkazu: %s</string>
+    <string name="empty_query_toast">Vyhledávací dotaz nesmí být prázdný.</string>
+    <string name="app_name_tv">WSPlayer TV</string>
+    <string name="search_no_results_tv">Žádné výsledky</string>
+    <string name="search_no_results_for_query_tv">Pro dotaz \'%s\' nebyly nalezeny žádné soubory.</string>
+    <string name="search_results_header">Výsledky vyhledávání</string>
+
     <string-array name="search_categories_array">
-        <item>Vše</item>
+        <item>Všechny kategorie</item>
         <item>Video</item>
-        <item>Audio</item>
         <item>Obrázky</item>
+        <item>Audio</item>
         <item>Dokumenty</item>
         <item>Archivy</item>
     </string-array>
 
-    {# Odpovídající API hodnoty pro kategorie v pořadí jako v array #}
     <string-array name="search_categories_api_values">
-        <item></item>
-        {# Prázdné pro 'Vše' #}
-        <item>video</item>
-        <item>audio</item>
+        <item></item> <item>video</item>
         <item>images</item>
+        <item>audio</item>
         <item>docs</item>
         <item>archives</item>
     </string-array>
 
-    {# TODO: Přidat další stringové zdroje, které budete potřebovat (např. pro názvy obrazovek,
-    zprávy uživateli atd.) #}
-    {# Příklad: <string name="title_activity_search">Vyhledávání</string> #}
+    <string-array name="sort_options_display_texts">
+        <item>Podle relevance (výchozí)</item>
+        <item>Nejnovější</item>
+        <item>Nejlépe hodnocené</item>
+        <item>Největší</item>
+        <item>Nejmenší</item>
+    </string-array>
+
+    <string-array name="sort_options_api_values">
+        <item>@null</item> <item>recent</item>
+        <item>rating</item>
+        <item>largest</item>
+        <item>smallest</item>
+    </string-array>
 
 </resources>

@@ -49,6 +49,10 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout) // Knihovna pro ConstraintLayout - DŮLEŽITÉ pro váš layout
 
+    implementation ("androidx.leanback:leanback:1.2.0") // Nebo nejnovější verze
+    implementation("io.coil-kt:coil:2.2.2") // Nebo nejnovější verze
+
+
     // ViewModel a LiveData (pro moderní správu stavu UI)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.livedata.ktx)

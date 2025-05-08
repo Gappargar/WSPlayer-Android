@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/wsplayer/ui/search/SearchActivity.kt
 package com.example.wsplayer.ui.search // Váš balíček pro SearchActivity - ZKONTROLUJTE
 
 import android.content.Context
@@ -6,11 +5,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.inputmethod.EditorInfo // Import pro EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.AdapterView // Import pro AdapterView (pro OnItemSelectedListener)
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.Observer // Nechat pokud používáte Observer { } syntaxi, jinak smazat
+// import androidx.lifecycle.Observer // Nechat pokud používáte Observer { } syntaxi, jinak smazat (již používáte lambda)
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -51,10 +52,10 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySearchBinding // Binding pro layout activity_search.xml
     private lateinit var viewModel: SearchViewModel // Toto je SearchViewModel
 
-    // **ODSTRANILI JSME PROMĚNNOU PRO LoginViewModel**
-    // private lateinit var loginViewModel: LoginViewModel
-
     private lateinit var searchAdapter: SearchAdapter
+
+    // Hodnoty pro API z pole stringů (pro řazení)
+    private lateinit var sortApiValues: Array<String>
 
     // Posluchač posunu pro RecyclerView (pro stránkování)
     private val scrollListener = object : RecyclerView.OnScrollListener() {
@@ -68,12 +69,10 @@ class SearchActivity : AppCompatActivity() {
                 val firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
 
                 val threshold = 5 // Načíst další stránku, když zbývá N položek do konce
-                // **Používáme isLoading z SearchViewModelu**
-                // A kontrolujeme, zda nejsme ve stavu LoadingMore (abychom nespouštěli vícekrát)
-                if (viewModel.isLoading.value != true && viewModel.searchState.value != SearchState.LoadingMore &&
-                    (visibleItemCount + firstVisibleItemPosition) >= (totalItemCount - threshold) && firstVisibleItemPosition >= 0) {
-                    println("SearchActivity: Detekován konec seznamu, volám loadNextPage().") // Log
-                    viewModel.loadNextPage() // Voláme metodu SearchViewModelu pro načtení další stránky
+                if (viewModel.isLoading.value == false && viewModel.searchState.value !is SearchState.LoadingMore &&
+                    (visibleItemCount + firstVisibleItemPosition) >= (totalItemCount - threshold) && firstVisibleItemPosition >= 0 && totalItemCount > 0) {
+                    println("SearchActivity: Detekován konec seznamu, volám loadNextPage().")
+                    viewModel.loadNextPage()
                 }
             }
         }
@@ -82,290 +81,246 @@ class SearchActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        println("SearchActivity: >>> onCreate spuštěn. PID: ${android.os.Process.myPid()}") // Log
+        println("SearchActivity: >>> onCreate spuštěn. PID: ${android.os.Process.myPid()}")
 
-        // --- Nastavení UI pomocí View Bindingu ---
-        binding = ActivitySearchBinding.inflate(layoutInflater) // Inflate layout activity_search.xml
-        setContentView(binding.root) // Použití binding.root
+        binding = ActivitySearchBinding.inflate(layoutInflater)
+        setContentView(binding.root)
         println("SearchActivity: ContentView nastaven.")
 
+        // Načtení pole pro API hodnoty řazení ze strings.xml
+        sortApiValues = resources.getStringArray(R.array.sort_options_api_values)
 
-        // --- Inicializace Spinneru pro výběr kategorie ---
-        val categoriesArray = resources.getStringArray(R.array.search_categories_array) // Použití string array z resources
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, categoriesArray)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.spinnerCategory.adapter = adapter
-        println("SearchActivity: Spinner nastaven.")
+        // --- Inicializace Spinneru pro výběr řazení ---
+        setupSortSpinner()
+        println("SearchActivity: Spinner řazení nastaven.")
 
 
         // --- Inicializace ViewModelu (SearchViewModel) pomocí Factory ---
-        // SearchViewModelFactory potřebuje Context a ApiService (pro vytvoření Repository uvnitř)
-        val apiService = WebshareApiService.create() // Vytvoří instanci ApiService (ZKONTROLUJTE CESTU)
-        val viewModelFactory = SearchViewModelFactory(applicationContext, apiService) // Factory pro SearchViewModel (ZKONTROLUJTE CESTU)
-        viewModel = ViewModelProvider(this, viewModelFactory).get(SearchViewModel::class.java) // Získání SearchViewModelu
+        val apiService = WebshareApiService.create()
+        val viewModelFactory = SearchViewModelFactory(applicationContext, apiService)
+        viewModel = ViewModelProvider(this, viewModelFactory)[SearchViewModel::class.java]
         println("SearchActivity: ViewModel (SearchViewModel) získán.")
 
 
-        // **ODSTRANILI JSME ZÍSKÁNÍ INSTANCE LoginViewModelu zde**
-
-
         // --- Inicializace Adapteru a Nastavení RecyclerView ---
-        // Inicializujeme adapter se click listenerem pro položky seznamu
-        searchAdapter = SearchAdapter { clickedFile -> // **searchAdapter**
-            println("SearchActivity: Kliknuto na soubor: ${clickedFile.name}") // Log
+        searchAdapter = SearchAdapter { clickedFile ->
+            println("SearchActivity: Kliknuto na soubor: ${clickedFile.name}")
 
             if (clickedFile.password == 1) {
                 Toast.makeText(this, "Soubor je chráněn heslem. Podpora zatím není implementována.", Toast.LENGTH_SHORT).show()
-                return@SearchAdapter // Ukončit listener pro tento klik
+                return@SearchAdapter
             }
-
-            // Zavolat metodu ViewModelu pro získání přímého odkazu na soubor
             viewModel.getFileLinkForFile(clickedFile)
-
-            // TODO: Volitelně zobrazit ProgressBar nebo jiný indikátor získávání odkazu zde
-            // binding.progressBarGettingLink.visibility = View.VISIBLE // Vyžaduje ProgressBar navíc v layoutu
         }
-        // Nastavení LayoutManageru a Adapteru pro RecyclerView
         binding.recyclerViewSearchResults.layoutManager = LinearLayoutManager(this)
-        // Přidání posluchače posunu pro stránkování
         binding.recyclerViewSearchResults.addOnScrollListener(scrollListener)
-        binding.recyclerViewSearchResults.adapter = searchAdapter // Nastavení adapteru pro RecyclerView
+        binding.recyclerViewSearchResults.adapter = searchAdapter
         println("SearchActivity: RecyclerView a Adapter nastaveny.")
 
 
         // --- Sledování stavů ze SearchViewModelu (Observere) ---
-
-        // Observer pro stav vyhledávání souborů (SearchState) - Zjednodušená syntaxe lambda observeru
-        // Tento observer reaguje na změny stavu SearchViewModelu a aktualizuje UI
-        println("SearchActivity: Nastavuji Observer pro viewModel.searchState.") // Log
-        viewModel.searchState.observe(this) { state -> // 'state' je aktuální SearchState
-            println("SearchActivity: Observer searchState spuštěn. Aktuální stav: $state") // Log aktuálního stavu
-            when (state) { // Zpracování různých stavů vyhledávání (vyčerpávající 'when')
-                is SearchState.Idle -> { // Použití SearchState přímo (po importu z data.models.*)
-                    binding.progressBarSearch.visibility = View.GONE
-                    binding.buttonSearch.isEnabled = true
-                    // Binding prvků, které se zobrazují v Idle stavu
-                    binding.recyclerViewSearchResults.visibility = View.GONE
-                    binding.textViewSearchMessage.text = "Zadejte, co hledáte..."
-                    binding.textViewSearchMessage.visibility = View.VISIBLE
-                }
-                is SearchState.Loading -> { // Stav načítání první stránky
-                    binding.progressBarSearch.visibility = View.VISIBLE // Zobrazit hlavní progress bar
-                    binding.buttonSearch.isEnabled = false
-                    // Binding prvků, které se skrývají v Loading stavu
-                    binding.recyclerViewSearchResults.visibility = View.GONE
-                    binding.textViewSearchMessage.visibility = View.GONE
-                }
-                is SearchState.Success -> { // Úspěšně načteny výsledky (první nebo další stránka)
-                    binding.progressBarSearch.visibility = View.GONE
-                    binding.buttonSearch.isEnabled = true
-
-                    // Předat (aktualizovaný) seznam Adapteru - submitList se postará o přidání nových položek
-                    if (::searchAdapter.isInitialized) { // Kontrola inicializace adapteru
-                        searchAdapter.submitList(state.results) // state.results je List<FileModel>
-                    }
-
-                    binding.recyclerViewSearchResults.visibility = View.VISIBLE // Zobrazit seznam
-                    binding.textViewSearchMessage.visibility = View.GONE
-                    // Toast s informací o výsledcích (používá string resource, pokud je definován)
-                    Toast.makeText(this, "Vyhledávání úspěšné! Nalezeno ${state.results.size} souborů na stránce. Celkem: ${state.totalResults}", Toast.LENGTH_SHORT).show()
-                }
-                is SearchState.Error -> { // Chyba při vyhledávání
-                    binding.progressBarSearch.visibility = View.GONE
-                    binding.buttonSearch.isEnabled = true
-                    if (::searchAdapter.isInitialized) {
-                        searchAdapter.submitList(emptyList()) // Vyčistit seznam při chybě
-                    }
-                    binding.recyclerViewSearchResults.visibility = View.GONE
-                    binding.textViewSearchMessage.text = "Chyba při vyhledávání: ${state.message}" // state.message
-                    binding.textViewSearchMessage.visibility = View.VISIBLE
-                    Toast.makeText(this, "Chyba při vyhledávání: ${state.message}", Toast.LENGTH_LONG).show() // state.message
-                }
-                is SearchState.EmptyResults -> { // Nalezeno 0 výsledků
-                    binding.progressBarSearch.visibility = View.GONE
-                    binding.buttonSearch.isEnabled = true
-                    if (::searchAdapter.isInitialized) {
-                        searchAdapter.submitList(emptyList()) // Vyčistit seznam
-                    }
-                    binding.recyclerViewSearchResults.visibility = View.GONE
-                    binding.textViewSearchMessage.text = "Nenalezeny žádné soubory pro daný dotaz."
-                    binding.textViewSearchMessage.visibility = View.VISIBLE
-                    Toast.makeText(this, "Nenalezeny žádné soubory.", Toast.LENGTH_SHORT).show()
-                }
-                is SearchState.LoadingMore -> { // Stav načítání dalších stránek (pro stránkování)
-                    println("SearchActivity: SearchState je LoadingMore.") // Log
-                    // TODO: Zde můžete zobrazit indikátor načítání pro stránkování (např. malý progress bar dole)
-                    // binding.progressBarPagination.visibility = View.VISIBLE // Předpokládá, že máte takový prvek v layoutu
-                    binding.progressBarSearch.visibility = View.GONE // Hlavní progress bar by měl být skryt
-                    // Seznam výsledků (_searchResults.value) se zde NEMĚNÍ, zůstávají zobrazené předchozí položky
-                }
-            }
-        }
-
-
-        // Observer pro stav získání odkazu na soubor (FileLinkState) - Zjednodušená syntaxe lambda observeru
-        // Tento observer reaguje na stav získání přímého odkazu na soubor a spustí přehrávač
-        println("SearchActivity: Nastavuji Observer pro viewModel.fileLinkState.") // Log
-        viewModel.fileLinkState.observe(this) { state -> // 'state' je aktuální FileLinkState
-            println("SearchActivity: Observer fileLinkState spuštěn. Aktuální stav: $state") // Log aktuálního stavu
-            when (state) { // Zpracování různých stavů získání odkazu (vyčerpávající 'when')
-                is FileLinkState.Idle -> { // Použití FileLinkState přímo
-                    // TODO: Skrýt indikátor získávání odkazu
-                    // binding.progressBarGettingLink.visibility = View.GONE
-                }
-                is FileLinkState.LoadingLink -> { // Použití FileLinkState přímo
-                    // TODO: Zobrazit indikátor získávání odkazu
-                    // binding.progressBarGettingLink.visibility = View.VISIBLE
-                    Toast.makeText(this, "Získávám odkaz na soubor...", Toast.LENGTH_SHORT).show()
-                }
-                is FileLinkState.LinkSuccess -> { // Použití FileLinkState přímo
-                    // Odkaz úspěšně získán - nyní spustíme externí přehrávač
-                    // TODO: Skrýt indikátor získávání odkazu
-                    // binding.progressBarGettingLink.visibility = View.GONE
-
-                    val fileUrl = state.fileUrl // state.fileUrl je String
-                    binding.textViewSearchMessage.visibility = View.GONE // Skrýt TextView zpráv
-
-
-                    // --- Spuštění Intentu ACTION_VIEW s URL pro externí přehrávač ---
-                    if (fileUrl != null && fileUrl.isNotEmpty()) { // Kontrola, zda URL není null/prázdná
-                        val playIntent = Intent(Intent.ACTION_VIEW)
-                        // Set data a type Intentu
-                        // uri je Uri objekt, proto Uri.parse(fileUrl)
-                        // type je MIME typ, např. "video/*"
-                        playIntent.setDataAndType(Uri.parse(fileUrl), "video/*") // Používá fileUrl
-
-                        println("SearchActivity: FileLinkState.LinkSuccess - Spouštím Intent ACTION_VIEW pro URL: $fileUrl") // Log
-
-                        // Ověřit, zda existuje aplikace schopná Intent zpracovat
-                        if (playIntent.resolveActivity(packageManager) != null) {
-                            startActivity(playIntent) // Spustí externí aplikaci pro přehrávání
-                        } else {
-                            Toast.makeText(this, "Nenalezena žádná aplikace pro přehrávání videa.", Toast.LENGTH_LONG).show()
-                        }
-                    } else {
-                        Toast.makeText(this, "Chyba: Získán prázdný odkaz pro přehrávání.", Toast.LENGTH_LONG).show()
-                        binding.textViewSearchMessage.text = "Chyba: Získán prázdný odkaz pro přehrávání."
-                        binding.textViewSearchMessage.visibility = View.VISIBLE
-                    }
-                }
-                is FileLinkState.Error -> { // <- POZOR, název stavu podle DataModels.kt (pokud LinkError, opravit zde)
-                    // Došlo k chybě při získání odkazu
-                    // TODO: Skrýt indikátor získávání odkazu
-                    // binding.progressBarGettingLink.visibility = View.GONE
-
-                    binding.textViewSearchMessage.text = "Chyba při získání odkazu: ${state.message}" // state.message
-                    binding.textViewSearchMessage.visibility = View.VISIBLE
-                    Toast.makeText(this, "Chyba při získání odkazu: ${state.message}", Toast.LENGTH_LONG).show() // state.message
-                }
-            }
-        }
-
-
-        // **NOVÝ Observer pro kontrolu přihlášení na základě TOKENU v SearchViewModelu**
-        // Tento observer zajistí přesměrování na login obrazovku, pokud uživatel přestane být přihlášen (např. smazání tokenu při logoutu)
-        println("SearchActivity: Nastavuji Observer pro viewModel.isUserLoggedIn.") // Log
-        viewModel.isUserLoggedIn.observe(this) { isLoggedIn -> // 'isLoggedIn' je Boolean
-            println("SearchActivity: Observer isUserLoggedIn spuštěn. isUserLoggedIn: $isLoggedIn") // Log stavu
-            if (!isLoggedIn) { // Pokud ViewModel signalizuje, že uživatel NENÍ přihlášen (např. token byl smazán při logoutu)
-                println("SearchActivity: isUserLoggedIn je false (žádný token nalezen?). Přesměrovávám na LoginActivity.")
-                // Přesměrovat zpět na LoginActivity a vymazat Task Stack
-                val intent = Intent(this, MainActivity::class.java) // Intent pro MainActivity (ZKONTROLUJTE CESTU)
-                // Tyto flags zajistí, že se LoginActivity stane novým kořenem Tasku
-                // a SearchActivity (a vše ostatní v jejím Tasku) bude ukončeno.
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
-                startActivity(intent)
-                finish() // **Ukončit SearchActivity**
-                println("SearchActivity: finish() voláno po přesměrování na LoginActivity.")
-            } else {
-                // Uživatel je přihlášen (má token) - nic nedělat, zůstat na SearchActivity
-                println("SearchActivity: isUserLoggedIn je true (token nalezen). Pokračuji v SearchActivity.")
-                // Zde můžete případně spustit prvotní načtení dat pro SearchActivity,
-                // pokud se to neděje automaticky v init ViewModelu a chcete to spustit zde.
-            }
-        } // Konec observeru
-        println("SearchActivity: Observer isUserLoggedIn nastaven.")
+        observeSearchState()
+        observeFileLinkState()
+        observeLoginStatus()
 
 
         // --- Posluchači na tlačítka a EditText ---
+        setupListeners()
 
-        // Posluchač na tlačítko Hledat
-        println("SearchActivity: Nastavuji OnClickListener pro tlačítko Hledat.") // Log
-        binding.buttonSearch.setOnClickListener { // Předpokládá ID buttonSearch v layoutu
-            println("SearchActivity: Kliknuto na tlačítko Hledat.") // Log
-            val query = binding.editTextSearchQuery.text.toString().trim() // Předpokládá ID editTextSearchQuery v layoutu
-
-            val selectedCategoryIndex = binding.spinnerCategory.selectedItemPosition // Předpokládá ID spinnerCategory v layoutu
-            val categoriesApiValues = resources.getStringArray(R.array.search_categories_api_values) // Použití R.array
-
-            val selectedCategoryApiValue = if (selectedCategoryIndex >= 0 && selectedCategoryIndex < categoriesApiValues.size) {
-                categoriesApiValues[selectedCategoryIndex]
-            } else {
-                "" // Výchozí prázdná kategorie (nebo null, záleží na API)
-            }
-
-            // Spustit vyhledávání POUZE pokud query není prázdná a uživatel je (podle ViewModelu) přihlášen
-            if (query.isNotEmpty()) {
-                // Kontrola stavu přihlášení z ViewModelu před spuštěním vyhledávání
-                if (viewModel.isUserLoggedIn.value == true) { // Kontrola pomocí LiveData
-                    println("SearchActivity: Spouštím vyhledávání pro dotaz: '$query', kategorie: '$selectedCategoryApiValue'") // Log
-                    viewModel.search(query, category = selectedCategoryApiValue) // Volání search metody ViewModelu
-                } else {
-                    // Mělo by se již přesměrovat observerem, ale pro jistotu
-                    println("SearchActivity: Pokus o vyhledávání bez přihlášení.") // Log
-                    Toast.makeText(this, "Pro vyhledávání se prosím přihlaste.", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(this, "Vyhledávací dotaz nesmí být prázdný.", Toast.LENGTH_SHORT).show()
-                println("SearchActivity: Pokus o prázdné vyhledávání.") // Log
-            }
-
-            // Skrýt klávesnici po kliknutí na tlačítko
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.hideSoftInputFromWindow(binding.root.windowToken, 0) // Použití binding.root.windowToken
-            println("SearchActivity: Klávesnice skryta.") // Log
-        }
-
-        // Posluchač na stisknutí "Hledat" na klávesnici
-        binding.editTextSearchQuery.setOnEditorActionListener { v, actionId, event ->
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
-                binding.buttonSearch.performClick() // Simulace kliknutí na tlačítko Hledat
-                true // Událost zpracována
-            } else {
-                false // Událost nezpracována
-            }
-        }
-
-        // Posluchač na tlačítko Nastavení
-        println("SearchActivity: Nastavuji OnClickListener pro tlačítko Nastavení.") // Log
-        binding.buttonSettings.setOnClickListener { // Předpokládá ID buttonSettings v layoutu
-            println("SearchActivity: Kliknuto na tlačítko Nastavení.") // Log
-            val intent = Intent(this, SettingsActivity::class.java) // Intent pro SettingsActivity (ZKONTROLUJTE CESTU)
-            // Při navigaci na SettingsActivity můžeme nechat standardní chování zásobníku,
-            // aby se uživatel mohl vrátit tlačítkem Zpět na SearchActivity.
-            startActivity(intent) // Spustí SettingsActivity
-        }
-
-        println("SearchActivity: <<< onCreate dokončen.") // Log na konci metody
+        println("SearchActivity: <<< onCreate dokončen.")
     }
 
-    // Metoda volaná, když Activity končí
+    private fun setupSortSpinner() {
+        val sortOptionsDisplayArray = resources.getStringArray(R.array.sort_options_display_texts)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sortOptionsDisplayArray)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spinnerSort.adapter = adapter // Používáme binding pro spinnerSort
+
+        // Listener můžeme ponechat, pokud by měl vyhledávání spouštět automaticky
+        // binding.spinnerSort.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+        //    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+        //        performSearchWithCurrentValues() // Volitelně spustit hledání hned
+        //    }
+        //    override fun onNothingSelected(parent: AdapterView<*>?) {}
+        // }
+    }
+
+
+    private fun observeSearchState() {
+        println("SearchActivity: Nastavuji Observer pro viewModel.searchState.")
+        viewModel.searchState.observe(this) { state ->
+            println("SearchActivity: Observer searchState spuštěn. Aktuální stav: $state")
+            when (state) {
+                is SearchState.Idle -> {
+                    binding.progressBarSearch.visibility = View.GONE
+                    binding.buttonSearch.isEnabled = true
+                    binding.recyclerViewSearchResults.visibility = View.GONE
+                    binding.textViewSearchMessage.text = getString(R.string.search_idle_message)
+                    binding.textViewSearchMessage.visibility = View.VISIBLE
+                }
+                is SearchState.Loading -> {
+                    binding.progressBarSearch.visibility = View.VISIBLE
+                    binding.buttonSearch.isEnabled = false
+                    binding.recyclerViewSearchResults.visibility = View.GONE
+                    binding.textViewSearchMessage.visibility = View.GONE
+                }
+                is SearchState.Success -> {
+                    binding.progressBarSearch.visibility = View.GONE
+                    binding.buttonSearch.isEnabled = true
+                    if (::searchAdapter.isInitialized) {
+                        searchAdapter.submitList(state.results)
+                    }
+                    binding.recyclerViewSearchResults.visibility = View.VISIBLE
+                    binding.textViewSearchMessage.visibility = View.GONE
+                    if (state.results.isNotEmpty()) {
+                        Toast.makeText(this, getString(R.string.search_success_toast, state.results.size, state.totalResults), Toast.LENGTH_SHORT).show()
+                    } else if (binding.editTextSearchQuery.text.toString().trim().isNotEmpty()) {
+                        binding.textViewSearchMessage.text = getString(R.string.search_no_results_for_query)
+                        binding.textViewSearchMessage.visibility = View.VISIBLE
+                        Toast.makeText(this, getString(R.string.search_no_results_toast), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                is SearchState.Error -> {
+                    binding.progressBarSearch.visibility = View.GONE
+                    binding.buttonSearch.isEnabled = true
+                    if (::searchAdapter.isInitialized) {
+                        searchAdapter.submitList(emptyList())
+                    }
+                    binding.recyclerViewSearchResults.visibility = View.GONE
+                    binding.textViewSearchMessage.text = getString(R.string.search_error_message, state.message)
+                    binding.textViewSearchMessage.visibility = View.VISIBLE
+                    Toast.makeText(this, getString(R.string.search_error_toast, state.message), Toast.LENGTH_LONG).show()
+                }
+                is SearchState.EmptyResults -> {
+                    binding.progressBarSearch.visibility = View.GONE
+                    binding.buttonSearch.isEnabled = true
+                    if (::searchAdapter.isInitialized) {
+                        searchAdapter.submitList(emptyList())
+                    }
+                    binding.recyclerViewSearchResults.visibility = View.GONE
+                    binding.textViewSearchMessage.text = getString(R.string.search_no_results_for_query)
+                    binding.textViewSearchMessage.visibility = View.VISIBLE
+                    Toast.makeText(this, getString(R.string.search_no_results_toast), Toast.LENGTH_SHORT).show()
+                }
+                is SearchState.LoadingMore -> {
+                    println("SearchActivity: SearchState je LoadingMore.")
+                    binding.buttonSearch.isEnabled = false
+                }
+            }
+        }
+    }
+
+    private fun observeFileLinkState() {
+        println("SearchActivity: Nastavuji Observer pro viewModel.fileLinkState.")
+        viewModel.fileLinkState.observe(this) { state ->
+            println("SearchActivity: Observer fileLinkState spuštěn. Aktuální stav: $state")
+            when (state) {
+                is FileLinkState.Idle -> {}
+                is FileLinkState.LoadingLink -> {
+                    Toast.makeText(this, getString(R.string.getting_link_toast), Toast.LENGTH_SHORT).show()
+                }
+                is FileLinkState.LinkSuccess -> {
+                    val fileUrl = state.fileUrl
+                    binding.textViewSearchMessage.visibility = View.GONE
+
+                    if (fileUrl.isNotEmpty()) {
+                        val playIntent = Intent(Intent.ACTION_VIEW)
+                        playIntent.setDataAndType(Uri.parse(fileUrl), "video/*")
+                        println("SearchActivity: FileLinkState.LinkSuccess - Spouštím Intent ACTION_VIEW pro URL: $fileUrl")
+                        if (playIntent.resolveActivity(packageManager) != null) {
+                            startActivity(playIntent)
+                        } else {
+                            Toast.makeText(this, getString(R.string.no_video_player_app_toast), Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Toast.makeText(this, getString(R.string.empty_link_error_toast), Toast.LENGTH_LONG).show()
+                        binding.textViewSearchMessage.text = getString(R.string.empty_link_error_message)
+                        binding.textViewSearchMessage.visibility = View.VISIBLE
+                    }
+                    viewModel.resetFileLinkState() // Reset stavu
+                }
+                is FileLinkState.Error -> {
+                    binding.textViewSearchMessage.text = getString(R.string.link_error_message, state.message)
+                    binding.textViewSearchMessage.visibility = View.VISIBLE
+                    Toast.makeText(this, getString(R.string.link_error_toast, state.message), Toast.LENGTH_LONG).show()
+                    viewModel.resetFileLinkState() // Reset stavu
+                }
+            }
+        }
+    }
+
+    private fun observeLoginStatus() {
+        println("SearchActivity: Nastavuji Observer pro viewModel.isUserLoggedIn.")
+        viewModel.isUserLoggedIn.observe(this) { isLoggedIn ->
+            println("SearchActivity: Observer isUserLoggedIn spuštěn. isUserLoggedIn: $isLoggedIn")
+            if (!isLoggedIn) {
+                println("SearchActivity: isUserLoggedIn je false. Přesměrovávám na MainActivity.")
+                val intent = Intent(this, MainActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
+                finish()
+                println("SearchActivity: finish() voláno po přesměrování na MainActivity.")
+            } else {
+                println("SearchActivity: isUserLoggedIn je true. Pokračuji v SearchActivity.")
+            }
+        }
+        println("SearchActivity: Observer isUserLoggedIn nastaven.")
+    }
+
+    private fun setupListeners() {
+        println("SearchActivity: Nastavuji OnClickListener pro tlačítko Hledat.")
+        binding.buttonSearch.setOnClickListener {
+            performSearchWithCurrentValues()
+        }
+
+        binding.editTextSearchQuery.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                performSearchWithCurrentValues()
+                true
+            } else {
+                false
+            }
+        }
+
+        println("SearchActivity: Nastavuji OnClickListener pro tlačítko Nastavení.")
+        binding.buttonSettings.setOnClickListener {
+            println("SearchActivity: Kliknuto na tlačítko Nastavení.")
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
+        }
+    }
+
+    private fun performSearchWithCurrentValues() {
+        println("SearchActivity: Kliknuto na tlačítko Hledat / Akce z klávesnice.")
+        val query = binding.editTextSearchQuery.text.toString().trim()
+
+        val fixedCategoryApiValue = "video" // ***** VŽDY HLEDÁME VIDEO *****
+
+        val selectedSortIndex = binding.spinnerSort.selectedItemPosition // Čteme hodnotu ze spinneru pro řazení
+        val selectedSortApiValue = sortApiValues.getOrNull(selectedSortIndex)?.let {
+            if (it == "@null") null else it
+        }
+
+        if (query.isNotEmpty()) {
+            println("SearchActivity: Spouštím vyhledávání pro dotaz: '$query', kategorie: '$fixedCategoryApiValue', řazení: '$selectedSortApiValue'")
+            viewModel.search(query, category = fixedCategoryApiValue, sort = selectedSortApiValue) // Použití pevné kategorie
+        } else {
+            Toast.makeText(this, getString(R.string.empty_query_toast), Toast.LENGTH_SHORT).show()
+            println("SearchActivity: Pokus o prázdné vyhledávání.")
+        }
+
+        // Skrytí klávesnice
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
+        println("SearchActivity: Klávesnice skryta.")
+    }
+
     override fun onDestroy() {
-        println("SearchActivity: >>> onDestroy spuštěn. PID: ${android.os.Process.myPid()}") // Log
-        // Důležité: Odstranit posluchač posunu, aby nedošlo k memory leaku nebo chybám
-        if (::binding.isInitialized) { // Ověřit, zda byl binding inicializován před použitím
-            binding.recyclerViewSearchResults.removeOnScrollListener(scrollListener) // Předpokládá ID recyclerViewSearchResults
+        println("SearchActivity: >>> onDestroy spuštěn. PID: ${android.os.Process.myPid()}")
+        if (::binding.isInitialized) {
+            binding.recyclerViewSearchResults.removeOnScrollListener(scrollListener)
         }
         super.onDestroy()
-        println("SearchActivity: <<< onDestroy dokončen.") // Log
+        println("SearchActivity: <<< onDestroy dokončen.")
     }
-
-    // TODO: SearchActivity potřebuje svůj vlastní layout activity_search.xml
-    // který obsahuje UI prvky jako jsou editTextSearchQuery, spinnerCategory, buttonSearch,
-    // recyclerViewSearchResults, textViewSearchMessage, progressBarSearch, buttonSettings
-    // s odpovídajícími ID.
-    // Ujistěte se, že máte povolený View Binding pro activity_search.xml v build.gradle.
-
-    // TODO: SearchActivity také předpokládá existenci SearchAdapter.kt
-    // a SearchViewModelFactory.kt
 }
