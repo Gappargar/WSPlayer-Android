@@ -16,16 +16,20 @@ class LoadMorePresenter : Presenter() {
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         val textView = TextView(parent.context).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) // Šířka na celou šířku řádku
             isFocusable = true
             isFocusableInTouchMode = true
-            // ***** Použití vlastního drawable *****
-            background = ContextCompat.getDrawable(context, R.drawable.load_more_background) // Použití vašeho nového drawable
-            setPadding(32, 16, 32, 16)
+            // Použití vlastního drawable pro lepší vzhled tlačítka
+            background = ContextCompat.getDrawable(context, R.drawable.load_more_background)
+            setPadding(48, 24, 48, 24) // Větší padding
             gravity = Gravity.CENTER
-            minWidth = 200
-            text = context.getString(R.string.load_more) // Text tlačítka z vašich stringů
-            setTextColor(ContextCompat.getColor(context, LeanbackR.color.lb_tv_white)) // Barva textu může zůstat z Leanback
+            // minWidth = 250 // Můžete nastavit, pokud chcete
+            text = context.getString(R.string.load_more)
+            setTextColor(ContextCompat.getColor(context, LeanbackR.color.lb_tv_white))
+            // Můžete nastavit větší text, pokud je potřeba
+            // setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f) // Příklad
+            // Nastavení focus highlight (může být potřeba vlastní, pokud výchozí Leanback nestačí)
+            // focusHighlight = FocusHighlight.ZOOM_FACTOR_SMALL // Příklad
         }
         return ViewHolder(textView)
     }

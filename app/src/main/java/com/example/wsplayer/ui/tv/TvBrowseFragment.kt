@@ -1,5 +1,6 @@
 package com.example.wsplayer.ui.tv // Ujistěte se, že balíček odpovídá
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -9,25 +10,27 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-// import androidx.fragment.app.viewModels // Pro by viewModels() - nahrazeno lazy inicializací s factory
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.*
 import androidx.lifecycle.ViewModelProvider
 import com.example.wsplayer.R // Váš R soubor
 import com.example.wsplayer.data.api.WebshareApiService
-import com.example.wsplayer.data.models.* // Import modelů (FileModel, HistoryItem atd.)
-// import com.example.wsplayer.ui.player.PlayerActivity // Už není potřeba
+import com.example.wsplayer.data.models.* // Import všech modelů včetně HistoryState a HistoryItem
 import com.example.wsplayer.ui.search.SearchViewModel // Váš existující SearchViewModel
 import com.example.wsplayer.ui.search.SearchViewModelFactory
 // ***** PŘIDÁN SPRÁVNÝ IMPORT PRO HistoryState *****
 import com.example.wsplayer.ui.search.HistoryState // Import sealed classy z jejího souboru
 // ***********************************************
 import com.example.wsplayer.ui.tv.presenters.CardPresenter // Váš nový CardPresenter
-// import com.example.wsplayer.ui.tv.TvSearchActivity // Import pro TvSearchActivity
 
 class TvBrowseFragment : BrowseSupportFragment() {
 
     private val TAG = "TvBrowseFragment"
+
+    interface OnFileSelectedListener {
+        fun onFileSelectedInBrowse(file: FileModel?)
+    }
+    private var fileSelectedListener: OnFileSelectedListener? = null
 
     private val viewModel: SearchViewModel by lazy {
         val factory = SearchViewModelFactory(
@@ -38,8 +41,17 @@ class TvBrowseFragment : BrowseSupportFragment() {
     }
 
     private lateinit var rowsAdapter: ArrayObjectAdapter
-    // Adapter pro řádek historie
     private var historyListRowAdapter: ArrayObjectAdapter? = null
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        if (context is OnFileSelectedListener) {
+            fileSelectedListener = context
+            Log.d(TAG, "OnFileSelectedListener attached to activity.")
+        } else {
+            Log.e(TAG, "$context must implement OnFileSelectedListener for detail view to work.")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,18 +66,16 @@ class TvBrowseFragment : BrowseSupportFragment() {
         Log.d(TAG, "onViewCreated")
         observeViewModel()
 
-        // Načíst historii po ověření přihlášení
         viewModel.isUserLoggedIn.observe(viewLifecycleOwner) { isLoggedIn ->
             if (isLoggedIn == true) {
-                // Načíst historii pouze pokud ještě není načtená nebo se nenačítá
                 if (viewModel.historyState.value is HistoryState.Idle || viewModel.historyState.value == null) {
                     Log.d(TAG, "User logged in, fetching history...")
-                    viewModel.fetchHistory(limit = 30) // Načteme např. posledních 30 položek
+                    viewModel.fetchHistory(limit = 30)
                 }
             } else {
                 Log.w(TAG, "User is not logged in, cannot fetch history.")
-                // Můžeme zobrazit zprávu nebo vyčistit UI
                 displayInitialMessage()
+                fileSelectedListener?.onFileSelectedInBrowse(null)
             }
         }
     }
@@ -95,34 +105,35 @@ class TvBrowseFragment : BrowseSupportFragment() {
     private fun observeViewModel() {
         Log.d(TAG, "Setting up observers for ViewModel.")
 
-        // Observer pro stav historie
         viewModel.historyState.observe(viewLifecycleOwner) { state ->
             Log.d(TAG, "HistoryState changed: $state")
-            // Nyní by měl when výraz fungovat správně
             when (state) {
                 is HistoryState.Loading -> {
                     Log.d(TAG, "History state: Loading")
+                    fileSelectedListener?.onFileSelectedInBrowse(null)
                 }
                 is HistoryState.Success -> {
                     Log.d(TAG, "History state: Success - ${state.items.size} items")
                     displayHistory(state.items)
+                    if (state.items.isEmpty()){
+                        fileSelectedListener?.onFileSelectedInBrowse(null)
+                    }
                 }
                 is HistoryState.Error -> {
                     Log.e(TAG, "History state: Error - ${state.message}")
                     Toast.makeText(activity, "Chyba načítání historie: ${state.message}", Toast.LENGTH_LONG).show()
                     displayInitialMessage()
+                    fileSelectedListener?.onFileSelectedInBrowse(null)
                 }
                 is HistoryState.Idle -> {
                     Log.d(TAG, "History state: Idle")
                     displayInitialMessage()
+                    fileSelectedListener?.onFileSelectedInBrowse(null)
                 }
-                // else větev není potřeba, pokud jsou všechny stavy pokryty
             }
         }
 
-        // Observer pro stav odkazu (pro kliknutí na položku historie)
         viewModel.fileLinkState.observe(viewLifecycleOwner) { state ->
-            // Zpracování stavu odkazu... (beze změny)
             when (state) {
                 is FileLinkState.LoadingLink -> {
                     Log.d(TAG, "FileLinkState: LoadingLink")
@@ -133,7 +144,7 @@ class TvBrowseFragment : BrowseSupportFragment() {
                     if (state.fileUrl.isNotEmpty()) {
                         val playIntent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(Uri.parse(state.fileUrl), "video/*")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) // Přidání flagu
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         Log.d(TAG, "Attempting to start player with ACTION_VIEW for URL: ${state.fileUrl}")
                         if (playIntent.resolveActivity(requireActivity().packageManager) != null) {
@@ -162,80 +173,80 @@ class TvBrowseFragment : BrowseSupportFragment() {
         }
     }
 
-    /**
-     * Zobrazí úvodní zprávu nebo prázdný stav.
-     */
     private fun displayInitialMessage() {
         rowsAdapter.clear()
-        historyListRowAdapter = null // Resetovat adapter historie
-        val header = HeaderItem(0, getString(R.string.welcome_message_header)) // Použití existujícího stringu
+        historyListRowAdapter = null
+        val header = HeaderItem(0, getString(R.string.welcome_message_header))
         val messagePresenter = SingleTextViewPresenter()
         val messageAdapter = ArrayObjectAdapter(messagePresenter)
-        messageAdapter.add(getString(R.string.use_search_prompt)) // Použití existujícího stringu
+        messageAdapter.add(getString(R.string.use_search_prompt))
         rowsAdapter.add(ListRow(header, messageAdapter))
         Log.d(TAG, "Displayed initial message.")
+        fileSelectedListener?.onFileSelectedInBrowse(null)
     }
 
-    /**
-     * Zobrazí načtenou historii stahování.
-     */
     private fun displayHistory(historyItems: List<HistoryItem>) {
-        rowsAdapter.clear() // Vyčistit předchozí řádky (např. úvodní zprávu)
-        historyListRowAdapter = null // Resetovat
+        rowsAdapter.clear()
+        historyListRowAdapter = null
 
         if (historyItems.isEmpty()) {
-            // Pokud je historie prázdná, zobrazit zprávu
-            val header = HeaderItem(0, getString(R.string.history_header)) // Nový string
+            val header = HeaderItem(0, getString(R.string.history_header))
             val messagePresenter = SingleTextViewPresenter()
             val messageAdapter = ArrayObjectAdapter(messagePresenter)
-            messageAdapter.add(getString(R.string.history_empty)) // Nový string
+            messageAdapter.add(getString(R.string.history_empty))
             rowsAdapter.add(ListRow(header, messageAdapter))
             Log.d(TAG, "Displayed empty history message.")
+            fileSelectedListener?.onFileSelectedInBrowse(null)
             return
         }
 
-        // Vytvořit adapter pro historii s CardPresenterem
         val cardPresenter = CardPresenter()
         historyListRowAdapter = ArrayObjectAdapter(cardPresenter)
 
-        // Přidat položky historie do adapteru
-        // Převedeme HistoryItem na FileModel pro kompatibilitu s CardPresenterem
         historyItems.forEach { historyItem ->
             val fileModel = FileModel(
                 ident = historyItem.ident,
                 name = historyItem.name,
-                type = historyItem.name.substringAfterLast('.', ""), // Odvození typu z koncovky
+                type = historyItem.name.substringAfterLast('.', "?"), // Výchozí '?' pokud typ nelze odvodit
                 img = null, // Historie nemá obrázek
                 stripe = null,
                 stripe_count = null,
                 size = historyItem.size,
-                queued = 0, // Výchozí hodnota 0
-                positive_votes = 0, // Výchozí hodnota 0
-                negative_votes = 0, // Výchozí hodnota 0
-                password = historyItem.password
+                queued = 0,
+                positive_votes = 0,
+                negative_votes = 0,
+                password = historyItem.password,
+                // ***** PŘIDÁNO: Nastavení displayDate *****
+                displayDate = historyItem.startedAt ?: historyItem.endedAt // Použijeme startedAt, nebo endedAt jako fallback
+                // ***************************************
             )
             historyListRowAdapter?.add(fileModel)
         }
 
-        // Vytvořit řádek pro historii
-        val header = HeaderItem(0, getString(R.string.history_header)) // Nový string
+        val header = HeaderItem(0, getString(R.string.history_header))
         rowsAdapter.add(ListRow(header, historyListRowAdapter))
         Log.d(TAG, "Displayed ${historyItems.size} history items.")
+        if (historyItems.isNotEmpty() && rowsAdapter.size() > 0) {
+            // Spolehneme se na onItemViewSelectedListener pro aktualizaci detailů
+        } else {
+            fileSelectedListener?.onFileSelectedInBrowse(null)
+        }
     }
 
 
     private fun setupEventListeners() {
-        // Listener pro kliknutí - nyní musí rozlišit, zda klikáme na FileModel z historie
         onItemViewSelectedListener = OnItemViewSelectedListener { itemViewHolder, item, rowViewHolder, row ->
-            // Můžeme přidat logování pro typ vybrané položky
-            if (item is FileModel) { Log.d(TAG,"Selected FileModel: ${item.name}") }
+            if (item is FileModel) {
+                Log.d(TAG,"Selected FileModel: ${item.name}")
+                fileSelectedListener?.onFileSelectedInBrowse(item)
+            } else {
+                fileSelectedListener?.onFileSelectedInBrowse(null)
+            }
         }
 
         onItemViewClickedListener = OnItemViewClickedListener { itemViewHolder, item, rowViewHolder, row ->
-            // Zpracujeme kliknutí pouze na FileModel (který jsme vytvořili z HistoryItem)
             if (item is FileModel) {
                 Log.d(TAG, "History item clicked: ${item.name} (ident: ${item.ident})")
-                // Zavoláme getFileLinkForFile s tímto FileModel objektem
                 viewModel.getFileLinkForFile(item)
             } else {
                 Log.w(TAG, "Clicked on unknown item type: $item")
@@ -243,9 +254,7 @@ class TvBrowseFragment : BrowseSupportFragment() {
         }
     }
 
-    // Presenter pro zobrazení textové zprávy
     class SingleTextViewPresenter : Presenter() {
-        // Kód presenteru... (beze změny)
         override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
             val textView = TextView(parent.context).apply {
                 isFocusable = false
@@ -254,13 +263,9 @@ class TvBrowseFragment : BrowseSupportFragment() {
             }
             return Presenter.ViewHolder(textView)
         }
-
         override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
             (viewHolder.view as? TextView)?.text = item as? String ?: ""
         }
-
-        override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder?) {
-            // Nic
-        }
+        override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder?) {}
     }
 }

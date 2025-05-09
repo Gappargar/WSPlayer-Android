@@ -15,6 +15,9 @@ import androidx.leanback.R as LeanbackR
 class CardPresenter : Presenter() {
     private val TAG = "CardPresenter"
     private var defaultCardImage: Drawable? = null
+    private var selectedBackgroundColor: Int = 0
+    private var defaultBackgroundColor: Int = 0
+
 
     companion object {
         private const val CARD_WIDTH = 313 // dp, typická šířka pro karty v Leanback
@@ -24,78 +27,72 @@ class CardPresenter : Presenter() {
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         Log.d(TAG, "onCreateViewHolder")
 
-        // Načtení výchozího obrázku, který se použije jako placeholder nebo při chybě
-        // Ujistěte se, že máte obrázek 'default_background' ve složce res/drawable
         defaultCardImage = ContextCompat.getDrawable(parent.context, R.drawable.default_background)
+        // Načtení barev pro pozadí
+        selectedBackgroundColor = ContextCompat.getColor(parent.context, R.color.tv_card_selected_info_background)
+        defaultBackgroundColor = ContextCompat.getColor(parent.context, R.color.tv_card_default_info_background)
 
 
         val cardView = object : ImageCardView(parent.context) {
-            // Volitelně: Můžete přepsat setSelected pro vlastní vizuální zpětnou vazbu
-            // override fun setSelected(selected: Boolean) {
-            //     super.setSelected(selected)
-            //     // updateCardBackgroundColor(this, selected) // Příklad volání metody pro změnu barvy
-            // }
+            // Přepsání setSelected pro změnu barvy pozadí informační oblasti
+            override fun setSelected(selected: Boolean) {
+                updateCardBackgroundColor(this, selected)
+                super.setSelected(selected) // Důležité zavolat super metodu
+            }
         }
 
         cardView.isFocusable = true
         cardView.isFocusableInTouchMode = true
-        // cardView.setBackgroundColor(ContextCompat.getColor(parent.context, LeanbackR.color.lb_default_card_background)) // Počáteční barva
+        updateCardBackgroundColor(cardView, false) // Nastavení počáteční barvy pozadí
         return ViewHolder(cardView)
     }
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
-        val file = item as FileModel // Přetypování položky na váš FileModel
-        val cardView = viewHolder.view as ImageCardView // Přetypování view na ImageCardView
+        val file = item as FileModel
+        val cardView = viewHolder.view as ImageCardView
 
         Log.d(TAG, "onBindViewHolder for: ${file.name}")
 
-        // Nastavení typu karty - INFO_UNDER_WITH_EXTRA zobrazí obrázek, titulek pod ním a další text
         cardView.cardType = ImageCardView.CARD_TYPE_INFO_UNDER_WITH_EXTRA
-        cardView.titleText = file.name // Nastavení názvu souboru jako titulku karty
+        cardView.titleText = file.name
 
-        // Ošetření null/prázdného typu
         val fileTypeDisplay = if (file.type.isNullOrEmpty()) "?" else file.type.uppercase()
-        cardView.contentText = "$fileTypeDisplay - ${formatFileSize(file.size)}" // Příklad obsahu: typ souboru a velikost
+        var content = "$fileTypeDisplay - ${formatFileSize(file.size)}"
+        if (!file.displayDate.isNullOrEmpty()) {
+            content += " (${file.displayDate})"
+        }
+        cardView.contentText = content
 
-        // Nastavení rozměrů hlavního obrázku karty
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
 
-        // Načtení obrázku náhledu pomocí knihovny Coil
-        // Pokud je img null nebo prázdný, Coil automaticky použije placeholder/error drawable
         cardView.mainImageView.load(file.img) {
-            placeholder(defaultCardImage) // Zobrazí se během načítání obrázku
-            error(defaultCardImage)       // Zobrazí se, pokud dojde k chybě při načítání
-            // Můžete přidat další transformace nebo nastavení pro Coil
-            // crossfade(true)
+            placeholder(defaultCardImage)
+            error(defaultCardImage)
         }
-
-        // Volitelně: Můžete nastavit "badge" obrázek (malá ikona v rohu karty)
-        // cardView.badgeImage = ContextCompat.getDrawable(cardView.context, R.drawable.ic_hd_badge) // Příklad
+        // Resetování barvy pozadí při bindování, pro případ, že se view recykluje
+        updateCardBackgroundColor(cardView, cardView.isSelected)
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
         Log.d(TAG, "onUnbindViewHolder")
         val cardView = viewHolder.view as ImageCardView
-        // Uvolnění zdrojů, zejména hlavního obrázku, aby se předešlo memory leakům
         cardView.badgeImage = null
-        cardView.mainImage = null // Důležité pro uvolnění obrázku drženého Coil/Glide/Picasso
+        cardView.mainImage = null
     }
 
-    // Pomocná funkce pro formátování velikosti souboru do čitelnější podoby
     private fun formatFileSize(sizeInBytes: Long): String {
         if (sizeInBytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         val digitGroups = (Math.log10(sizeInBytes.toDouble()) / Math.log10(1024.0)).toInt()
-        // Zajistíme, aby digitGroups nepřesáhlo rozsah pole units
         val safeDigitGroups = digitGroups.coerceIn(0, units.size - 1)
         return String.format("%.1f %s", sizeInBytes / Math.pow(1024.0, safeDigitGroups.toDouble()), units[safeDigitGroups])
     }
 
-    // Příklad volitelné metody pro změnu barvy pozadí karty při výběru
-    // private fun updateCardBackgroundColor(view: ImageCardView, selected: Boolean) {
-    //     val colorRes = if (selected) LeanbackR.color.lb_basic_card_info_bg_color_selected else LeanbackR.color.lb_basic_card_info_bg_color // Použití Leanback barev
-    //     val color = ContextCompat.getColor(view.context, colorRes)
-    //     // view.setBackgroundColor(color) // Může změnit celé pozadí
-    //     view.infoAreaBackgroundColor = color // Pro oblast pod obrázkem
-    // }
+    // Metoda pro aktualizaci barvy pozadí informační oblasti karty
+    private fun updateCardBackgroundColor(cardView: ImageCardView, selected: Boolean) {
+        val color = if (selected) selectedBackgroundColor else defaultBackgroundColor
+        // ***** OPRAVA ZDE: Použití metody setInfoAreaBackgroundColor *****
+        cardView.setInfoAreaBackgroundColor(color)
+        Log.d(TAG, "Updating card info area background color. Selected: $selected, Color: $color")
+    }
 }
