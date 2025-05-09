@@ -100,3 +100,32 @@ sealed class FileLinkState {
     // Poznámka: Pokud byste chtěl(a) stav LinkError explicitně, přejmenujte toto na LinkError
     // a opravte to i v SearchActivity a SearchViewModel. Nyní se stav jmenuje Error.
 }
+
+data class HistoryItem(
+    val downloadId: String, // download_id
+    val ident: String,      // ident
+    val name: String,       // name
+    val size: Long,         // size (jako Long pro větší soubory)
+    val startedAt: String?, // started_at (může být prázdný?)
+    val endedAt: String?,   // ended_at (může být prázdný?)
+    val ipAddress: String?, // ip_address
+    val password: Int,      // password (0 nebo 1)
+    val copyrighted: Int    // copyrighted (0 nebo 1)
+    // Přidáme i type a img pro snazší zobrazení v CardPresenteru,
+    // i když nejsou přímo v history API. Budeme je muset případně doplnit
+    // nebo použít výchozí hodnoty.
+    // val type: String? = null, // Můžeme zkusit odvodit z názvu souboru
+    // val img: String? = null   // Historie neobsahuje obrázek
+)
+
+/**
+ * Reprezentuje celkovou odpověď z /api/history/ (<response> tag).
+ */
+data class HistoryResponse(
+    val status: String,         // OK, ERROR, FATAL
+    val total: Int = 0,         // Celkový počet položek v historii
+    val historyItems: List<HistoryItem> = emptyList(), // Seznam položek historie
+    // Pro případ chyby
+    val code: Int? = null,      // Kód chyby (např. HISTORY_FATAL_1)
+    val message: String? = null // Chybová zpráva
+)

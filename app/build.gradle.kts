@@ -51,7 +51,12 @@ dependencies {
 
     implementation ("androidx.leanback:leanback:1.2.0") // Nebo nejnovější verze
     implementation("io.coil-kt:coil:2.2.2") // Nebo nejnovější verze
-
+    
+    implementation("androidx.media3:media3-exoplayer:1.6.1") // Nebo novější verze
+    implementation("androidx.media3:media3-ui:1.6.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.6.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.6.1")
+    implementation("androidx.media3:media3-exoplayer-smoothstreaming:1.6.1")
 
     // ViewModel a LiveData (pro moderní správu stavu UI)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)

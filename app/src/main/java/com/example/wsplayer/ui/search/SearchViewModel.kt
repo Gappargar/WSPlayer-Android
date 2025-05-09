@@ -10,7 +10,7 @@ import com.example.wsplayer.data.repository.WebshareRepository // ZKONTROLUJTE C
 
 // **Importy pro datové třídy a sealed classy pro stavy z vašeho data.models balíčku**
 // ZKONTROLUJTE, že cesta odpovídá vašemu umístění DataModels.kt
-import com.example.wsplayer.data.models.* // <-- Toto by mělo importovat FileModel, SearchState, FileLinkState, SearchResponse, UserDataResponse atd.
+import com.example.wsplayer.data.models.* // <-- Toto by mělo importovat FileModel, SearchState, FileLinkState, HistoryItem, HistoryResponse atd.
 
 
 import kotlinx.coroutines.Dispatchers // Pro přepnutí kontextu (background vlákna)
@@ -19,31 +19,54 @@ import kotlinx.coroutines.withContext // Pro přepnutí kontextu uvnitř corouti
 
 import android.util.Log // Logování
 
+// ***** PŘIDÁN NOVÝ STAV PRO HISTORII *****
+/**
+ * Sealed class reprezentující stavy načítání historie.
+ */
+sealed class HistoryState {
+    object Idle : HistoryState()
+    object Loading : HistoryState()
+    data class Success(val items: List<HistoryItem>) : HistoryState() // Přenáší seznam HistoryItem
+    data class Error(val message: String) : HistoryState()
+}
+// *****************************************
+
 
 // ViewModel pro obrazovku vyhledávání.
 // Spravuje stavy UI, logiku vyhledávání a získávání odkazů na soubory.
-// Přijímá instanci WebshareRepository v konstruktoru (dodá SearchViewModelFactory).
+// Přidána správa historie.
 class SearchViewModel(private val repository: WebshareRepository) : ViewModel() {
 
     private val TAG = "SearchViewModel" // Logovací tag
 
     // --- Stavy pro UI (LiveData) ---
 
+    // Stav vyhledávání
     private val _searchState = MutableLiveData<SearchState>(SearchState.Idle)
     val searchState: LiveData<SearchState> = _searchState
 
+    // Stav získávání odkazu
     private val _fileLinkState = MutableLiveData<FileLinkState>(FileLinkState.Idle)
     val fileLinkState: LiveData<FileLinkState> = _fileLinkState
 
+    // ***** PŘIDÁNO LiveData PRO HISTORII *****
+    private val _historyState = MutableLiveData<HistoryState>(HistoryState.Idle)
+    val historyState: LiveData<HistoryState> = _historyState
+    // ****************************************
+
+    // Indikátor načítání (pro vyhledávání) - může být potřeba i pro historii
     private val _isLoading = MutableLiveData<Boolean>(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
+    // Seznam nalezených souborů (pro vyhledávání)
     private val _searchResults = MutableLiveData<List<FileModel>>(emptyList())
     val searchResults: LiveData<List<FileModel>> = _searchResults
 
+    // Celkový počet výsledků vyhledávání
     private val _totalResults = MutableLiveData<Int>(0)
     val totalResults: LiveData<Int> = _totalResults
 
+    // Stav přihlášení uživatele
     private val _isUserLoggedIn = MutableLiveData<Boolean>()
     val isUserLoggedIn: LiveData<Boolean> = _isUserLoggedIn
 
@@ -52,8 +75,9 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
     private var currentSearchQuery: String = ""
     private var currentSearchCategory: String? = null
     private var currentSortOrder: String? = null
-    private var currentPage: Int = 0 // Stránky jsou obvykle indexovány od 0 pro výpočet offsetu
-    private val resultsPerPage = 20 // Toto je náš 'limit'
+    var currentPage: Int = 0 // Změněno na public pro přístup z fragmentu (pro Success state)
+        private set // Setter zůstává privátní
+    private val resultsPerPage = 50
 
 
     init {
@@ -64,16 +88,17 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
             val isLoggedIn = (token != null && token.isNotEmpty())
             _isUserLoggedIn.postValue(isLoggedIn)
             Log.d(TAG, "Kontrola tokenu dokončena. isUserLoggedIn: $isLoggedIn")
-            if (isLoggedIn) {
-                // loadUserData()
-            } else {
-                Log.d(TAG, "Token nenalezen při startu ViewModelu - Activity by se měla přesměrovat.")
-            }
+            // Pokud je přihlášen, můžeme rovnou načíst historii
+            // if (isLoggedIn) {
+            //     fetchHistory() // Volitelně načíst historii hned po startu
+            // }
         }
     }
 
+    // --- Metody pro logiku obrazovky ---
+
     fun search(query: String, category: String?, sort: String? = null) {
-        Log.d(TAG, "search() volán s dotazem: '$query', kategorií: '$category', řazením: '$sort'")
+        Log.d(TAG, "search() volán s dotazem: '$query', kategorií: '$category', řazením: '$sort', limit: $resultsPerPage")
         if (query.isEmpty()) {
             _searchState.postValue(SearchState.Idle)
             _searchResults.postValue(emptyList())
@@ -90,36 +115,34 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
             return
         }
 
-        if (_isLoading.value == true) {
-            Log.d(TAG, "Již probíhá načítání, přeskakuji nové vyhledávání.")
+        if (_isLoading.value == true && _searchState.value is SearchState.Loading) { // Kontrola i stavu
+            Log.d(TAG, "Již probíhá načítání (první stránka), přeskakuji nové vyhledávání.")
             return
         }
 
         currentSearchQuery = query
         currentSearchCategory = category
         currentSortOrder = sort
-        currentPage = 0 // Při novém vyhledávání vždy začínáme od první stránky (pro výpočet offsetu)
-        _searchResults.postValue(emptyList())
-        _totalResults.postValue(0)
+        currentPage = 0 // Při novém vyhledávání vždy začínáme od první stránky
+        _searchResults.postValue(emptyList()) // Vyčistit předchozí výsledky
+        _totalResults.postValue(0) // Resetovat celkový počet
 
         _isLoading.postValue(true)
         _searchState.postValue(SearchState.Loading)
 
         viewModelScope.launch(Dispatchers.IO) {
-            val calculatedOffset = currentPage * resultsPerPage // Výpočet offsetu
+            val calculatedOffset = currentPage * resultsPerPage
             Log.d(TAG, "Spouštím API volání přes repository pro vyhledávání - query '$currentSearchQuery', category '$currentSearchCategory', sort '$currentSortOrder', limit '$resultsPerPage', offset '$calculatedOffset'.")
 
-            // Předání 'sort', 'limit' a 'offset' do repository metody
-            // UJISTĚTE SE, ŽE VAŠE WebshareRepository.searchFiles() TYTO PARAMETRY PŘIJÍMÁ!
             val result = repository.searchFiles(
                 query = currentSearchQuery,
                 category = currentSearchCategory,
-                sort = currentSortOrder,    // Předání parametru sort
-                limit = resultsPerPage,   // Předání parametru limit
-                offset = calculatedOffset // Předání parametru offset
+                sort = currentSortOrder,
+                limit = resultsPerPage,
+                offset = calculatedOffset
             )
 
-            _isLoading.postValue(false)
+            _isLoading.postValue(false) // Načítání dokončeno
 
             if (result.isSuccess) {
                 val searchResponse = result.getOrThrow()
@@ -168,20 +191,18 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         _searchState.postValue(SearchState.LoadingMore)
 
         viewModelScope.launch(Dispatchers.IO) {
-            val calculatedOffset = currentPage * resultsPerPage // Výpočet offsetu pro další stránku
+            val calculatedOffset = currentPage * resultsPerPage
             Log.d(TAG, "Spouštím API volání přes repository (další stránka) - query '$currentSearchQuery', sort '$currentSortOrder', limit '$resultsPerPage', offset '$calculatedOffset'.")
 
-            // Předání 'sort', 'limit' a 'offset' i zde
-            // UJISTĚTE SE, ŽE VAŠE WebshareRepository.searchFiles() TYTO PARAMETRY PŘIJÍMÁ!
             val result = repository.searchFiles(
                 query = currentSearchQuery,
                 category = currentSearchCategory,
-                sort = currentSortOrder,    // Předání parametru sort
-                limit = resultsPerPage,   // Předání parametru limit
-                offset = calculatedOffset // Předání parametru offset
+                sort = currentSortOrder,
+                limit = resultsPerPage,
+                offset = calculatedOffset
             )
 
-            _isLoading.postValue(false)
+            _isLoading.postValue(false) // Načítání dokončeno
 
             if (result.isSuccess) {
                 val searchResponse = result.getOrThrow()
@@ -192,6 +213,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                     val currentList = _searchResults.value ?: emptyList()
                     val updatedList = currentList + newFiles
                     _searchResults.postValue(updatedList)
+                    // Celkový počet se nemění, použijeme uložený
                     _searchState.postValue(SearchState.Success(updatedList, _totalResults.value ?: updatedList.size))
                 } else {
                     Log.d(TAG, "API volání načítání další stránky vráceny 0 nových souborů.")
@@ -201,9 +223,53 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                 Log.e(TAG, "API volání načítání další stránky selhalo: ${result.exceptionOrNull()?.message}")
                 val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba při načítání dalších výsledků"
                 _searchState.postValue(SearchState.Error(errorMessage))
+                // Vrátit currentPage zpět, pokud načítání selhalo? Záleží na UX.
+                // currentPage--
             }
         }
     }
+
+    // ***** PŘIDÁNA METODA PRO NAČTENÍ HISTORIE *****
+    /**
+     * Načte historii stahování uživatele.
+     * @param limit Maximální počet položek k načtení.
+     */
+    fun fetchHistory(limit: Int = 20) { // Výchozí limit 20
+        Log.d(TAG, "fetchHistory() called with limit: $limit")
+        if (isUserLoggedIn.value != true) {
+            Log.e(TAG, "Cannot fetch history, user not logged in.")
+            _historyState.postValue(HistoryState.Error("Pro zobrazení historie je vyžadováno přihlášení."))
+            return
+        }
+        // Zkontrolovat, zda už nenačítáme historii
+        if (_historyState.value is HistoryState.Loading) {
+            Log.d(TAG, "History is already loading.")
+            return
+        }
+
+        _historyState.postValue(HistoryState.Loading) // Nastavit stav načítání
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = repository.getHistory(offset = 0, limit = limit) // Začínáme od offsetu 0
+
+            if (result.isSuccess) {
+                val historyResponse = result.getOrThrow()
+                if (historyResponse.historyItems.isNotEmpty()) {
+                    Log.d(TAG, "History fetched successfully. Items: ${historyResponse.historyItems.size}")
+                    _historyState.postValue(HistoryState.Success(historyResponse.historyItems))
+                } else {
+                    Log.d(TAG, "History fetched, but it's empty.")
+                    _historyState.postValue(HistoryState.Success(emptyList())) // Úspěch, ale prázdný seznam
+                }
+            } else {
+                val errorMessage = result.exceptionOrNull()?.message ?: "Neznámá chyba při načítání historie"
+                Log.e(TAG, "Failed to fetch history: $errorMessage")
+                _historyState.postValue(HistoryState.Error(errorMessage))
+            }
+        }
+    }
+    // ***********************************************
+
 
     fun getFileLinkForFile(fileItem: FileModel) {
         Log.d(TAG, "getFileLinkForFile() volán pro ${fileItem.name}.")
@@ -237,10 +303,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         }
     }
 
-    // ***** PŘIDÁNA METODA *****
-    // Metoda pro resetování stavu odkazu (volat z UI po zpracování LinkSuccess nebo Error)
     fun resetFileLinkState() {
-        // Zkontrolujeme, zda aktuální stav není už Idle, abychom zbytečně neaktualizovali
         if (_fileLinkState.value != FileLinkState.Idle) {
             _fileLinkState.postValue(FileLinkState.Idle)
             Log.d(TAG, "FileLinkState resetován na Idle.")

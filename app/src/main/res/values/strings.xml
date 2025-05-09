@@ -23,6 +23,24 @@
     <string name="search_no_results_tv">Žádné výsledky</string>
     <string name="search_no_results_for_query_tv">Pro dotaz \'%s\' nebyly nalezeny žádné soubory.</string>
     <string name="search_results_header">Výsledky vyhledávání</string>
+    <string name="tv_login_guidance_title">Přihlášení k Webshare</string>
+    <string name="tv_login_guidance_description_step1">Zadejte vaše uživatelské jméno nebo email</string>
+    <string name="tv_login_guidance_description_step2">Zadejte vaše heslo</string>
+
+    <string name="tv_login_action_username_title">Uživatelské jméno / Email</string>
+    <string name="tv_login_action_password_title">Heslo</string>
+    <string name="tv_login_action_user_display_title">Uživatel</string> <string name="tv_login_action_continue_title">Pokračovat</string>
+    <string name="tv_login_action_login_title">Přihlásit</string>
+    <string name="tv_login_action_remember_me_title">Zapamatovat si mě</string>
+
+    <string name="tv_login_error_username_empty">Jméno nesmí být prázdné!</string>
+    <string name="tv_login_error_password_empty">Heslo nesmí být prázdné!</string>
+    <string name="tv_login_error_toast">Chyba přihlášení: %s</string>
+    <string name="welcome_message_header">Vítejte</string>
+    <string name="use_search_prompt">Pro nalezení videa použijte ikonu lupy vpravo nahoře.</string>
+    <string name="load_more">Načíst další</string>
+    <string name="history_header">Historie stahování</string>
+    <string name="history_empty">Vaše historie stahování je prázdná.</string>
 
     <string-array name="search_categories_array">
         <item>Všechny kategorie</item>

@@ -262,14 +262,12 @@ class WebshareRepository(
     }
 
     // --- Implementace logiky vyhledávání souborů (pro SearchViewModel) ---
-    // Vrací Result<SearchResponse> při úspěchu, nebo chyba při selhání
-    // ***** UPRAVENÁ SIGNATURA A VOLÁNÍ *****
     suspend fun searchFiles(
         query: String,
         category: String?, // Ponecháno jako nullable
         sort: String?,     // Přidán parametr sort
-        limit: Int?,      // Přidán parametr limit (dříve itemsPerPage s default hodnotou)
-        offset: Int?      // Přidán parametr offset (dříve page, který se interně mapoval na offset)
+        limit: Int?,      // Přidán parametr limit
+        offset: Int?      // Přidán parametr offset
     ): Result<SearchResponse> {
         Log.d(TAG, "searchFiles() volán s query: '$query', category: '$category', sort: '$sort', limit: $limit, offset: $offset")
 
@@ -282,14 +280,13 @@ class WebshareRepository(
 
             try {
                 Log.d(TAG, "Volám API pro vyhledávání s query: '$query', category: '$category', sort: '$sort', limit: $limit, offset: $offset.")
-                // Přímé předání parametrů do ApiService
                 val searchResponseRetrofit: Response<String> = apiService.searchFiles(
                     token = token,
                     query = query,
                     category = category,
-                    sort = sort,     // Předání parametru sort
-                    limit = limit,   // Předání parametru limit
-                    offset = offset  // Předání parametru offset
+                    sort = sort,
+                    limit = limit,
+                    offset = offset
                 )
 
                 if (!searchResponseRetrofit.isSuccessful) {
@@ -418,4 +415,79 @@ class WebshareRepository(
             }
         }
     }
+
+    // ***** PŘIDÁNA METODA PRO HISTORII *****
+    /**
+     * Získá historii stahování pro přihlášeného uživatele.
+     * @param offset Posun v seznamu (pro stránkování).
+     * @param limit Maximální počet položek k načtení.
+     * @return Result obsahující HistoryResponse při úspěchu, nebo Exception při chybě.
+     */
+    suspend fun getHistory(offset: Int, limit: Int): Result<HistoryResponse> {
+        Log.d(TAG, "getHistory() volán s offset: $offset, limit: $limit")
+
+        return withContext(Dispatchers.IO) {
+            val token = getAuthToken()
+            if (token.isNullOrEmpty()) {
+                Log.e(TAG, "Získání historie selhalo, uživatel není přihlášen (token chybí).")
+                return@withContext Result.failure(Exception("Uživatel není přihlášen."))
+            }
+
+            try {
+                Log.d(TAG, "Volám API pro získání historie s offset: $offset, limit: $limit.")
+                val historyResponseRetrofit: Response<String> = apiService.getHistory(
+                    token = token,
+                    offset = offset,
+                    limit = limit
+                )
+
+                if (!historyResponseRetrofit.isSuccessful) {
+                    val errorBody = historyResponseRetrofit.errorBody()?.string() ?: "Není k dispozici"
+                    Log.e(TAG, "Chyba sítě při získání historie: ${historyResponseRetrofit.code()}, Tělo chyby: $errorBody")
+                    if (historyResponseRetrofit.code() == 401) {
+                        Log.e(TAG, "Chyba 401 Unauthorized při získání historie - mažu token.")
+                        clearAuthToken()
+                        return@withContext Result.failure(Exception("Token vypršel. Prosím, přihlaste se znovu."))
+                    }
+                    return@withContext Result.failure(Exception("Chyba sítě při získání historie: ${historyResponseRetrofit.code()}"))
+                }
+
+                val historyBody: String? = historyResponseRetrofit.body()
+                if (historyBody.isNullOrEmpty()) {
+                    Log.e(TAG, "Prázdná odpověď serveru při získání historie.")
+                    return@withContext Result.failure(Exception("Prázdná odpověď serveru při získání historie."))
+                }
+
+                Log.d(TAG, "Parsuji XML odpověď historie...")
+                // Použití vaší parsovací funkce z XmlUtils
+                val historyData: HistoryResponse = XmlUtils.parseHistoryResponseXml(historyBody)
+
+                when (historyData.status) {
+                    "OK" -> {
+                        Log.d(TAG, "Historie API status OK. Nalezeno ${historyData.total} položek celkem.")
+                        Result.success(historyData) // Vrátí naparsovaný HistoryResponse objekt
+                    }
+                    "ERROR", "FATAL" -> {
+                        Log.e(TAG, "Webshare API chyba při získání historie: ${historyData.message} (${historyData.code})")
+                        if (historyData.code == 102 /* Kód pro neplatný token */) {
+                            Log.e(TAG, "API kód ${historyData.code} při získání historie - mažu token.")
+                            clearAuthToken()
+                            return@withContext Result.failure(Exception("Token vypršel nebo je neplatný."))
+                        }
+                        Result.failure(Exception("Webshare API chyba: ${historyData.message} (${historyData.code})"))
+                    }
+                    else -> {
+                        Log.e(TAG, "Neznámý status odpovědi historie: ${historyData.status}")
+                        Result.failure(Exception("Neznámý status odpovědi historie: ${historyData.status}"))
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Neočekávaná chyba při získání historie: ${e.message}", e)
+                Result.failure(e)
+            }
+        }
+    }
+    // *******************************************
+
 }

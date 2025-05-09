@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import coil.load // Knihovna Coil pro načítání obrázků
 import com.example.wsplayer.R // Váš R soubor
 import com.example.wsplayer.data.models.FileModel // Váš datový model
+// Import pro Leanback R
+import androidx.leanback.R as LeanbackR
 
 class CardPresenter : Presenter() {
     private val TAG = "CardPresenter"
@@ -24,7 +26,6 @@ class CardPresenter : Presenter() {
 
         // Načtení výchozího obrázku, který se použije jako placeholder nebo při chybě
         // Ujistěte se, že máte obrázek 'default_background' ve složce res/drawable
-        // Můžete také použít standardní Leanback placeholder: R.drawable.lb_ic_videos
         defaultCardImage = ContextCompat.getDrawable(parent.context, R.drawable.default_background)
 
 
@@ -38,7 +39,7 @@ class CardPresenter : Presenter() {
 
         cardView.isFocusable = true
         cardView.isFocusableInTouchMode = true
-        // cardView.setBackgroundColor(ContextCompat.getColor(parent.context, R.color.tv_default_card_background)) // Počáteční barva
+        // cardView.setBackgroundColor(ContextCompat.getColor(parent.context, LeanbackR.color.lb_default_card_background)) // Počáteční barva
         return ViewHolder(cardView)
     }
 
@@ -51,23 +52,21 @@ class CardPresenter : Presenter() {
         // Nastavení typu karty - INFO_UNDER_WITH_EXTRA zobrazí obrázek, titulek pod ním a další text
         cardView.cardType = ImageCardView.CARD_TYPE_INFO_UNDER_WITH_EXTRA
         cardView.titleText = file.name // Nastavení názvu souboru jako titulku karty
-        cardView.contentText = "${file.type?.uppercase()} - ${formatFileSize(file.size)}" // Příklad obsahu: typ souboru a velikost
+
+        // Ošetření null/prázdného typu
+        val fileTypeDisplay = if (file.type.isNullOrEmpty()) "?" else file.type.uppercase()
+        cardView.contentText = "$fileTypeDisplay - ${formatFileSize(file.size)}" // Příklad obsahu: typ souboru a velikost
 
         // Nastavení rozměrů hlavního obrázku karty
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
 
         // Načtení obrázku náhledu pomocí knihovny Coil
-        // file.img by měla být URL adresa k obrázku náhledu
-        if (!file.img.isNullOrEmpty()) {
-            cardView.mainImageView.load(file.img) {
-                placeholder(defaultCardImage) // Zobrazí se během načítání obrázku
-                error(defaultCardImage)       // Zobrazí se, pokud dojde k chybě při načítání
-                // Můžete přidat další transformace nebo nastavení pro Coil
-                // crossfade(true)
-            }
-        } else {
-            // Pokud URL obrázku není k dispozici, zobrazí se výchozí obrázek
-            cardView.mainImageView.setImageDrawable(defaultCardImage)
+        // Pokud je img null nebo prázdný, Coil automaticky použije placeholder/error drawable
+        cardView.mainImageView.load(file.img) {
+            placeholder(defaultCardImage) // Zobrazí se během načítání obrázku
+            error(defaultCardImage)       // Zobrazí se, pokud dojde k chybě při načítání
+            // Můžete přidat další transformace nebo nastavení pro Coil
+            // crossfade(true)
         }
 
         // Volitelně: Můžete nastavit "badge" obrázek (malá ikona v rohu karty)
@@ -94,10 +93,9 @@ class CardPresenter : Presenter() {
 
     // Příklad volitelné metody pro změnu barvy pozadí karty při výběru
     // private fun updateCardBackgroundColor(view: ImageCardView, selected: Boolean) {
-    //     val colorRes = if (selected) R.color.tv_selected_card_background else R.color.tv_default_card_background
+    //     val colorRes = if (selected) LeanbackR.color.lb_basic_card_info_bg_color_selected else LeanbackR.color.lb_basic_card_info_bg_color // Použití Leanback barev
     //     val color = ContextCompat.getColor(view.context, colorRes)
-    //     view.setBackgroundColor(color)
-    //     // Pro některé typy karet může být potřeba nastavit i barvu informační oblasti
-    //     // view.infoAreaBackgroundColor = color
+    //     // view.setBackgroundColor(color) // Může změnit celé pozadí
+    //     view.infoAreaBackgroundColor = color // Pro oblast pod obrázkem
     // }
 }

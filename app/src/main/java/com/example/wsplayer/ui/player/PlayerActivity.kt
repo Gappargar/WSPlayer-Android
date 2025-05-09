@@ -1,26 +1,40 @@
 package com.example.wsplayer.ui.player // Ujistěte se, že balíček odpovídá
 
-import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import android.widget.MediaController
+// ***** PŘIDÁNY IMPORTY *****
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+// ***************************
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import com.example.wsplayer.R
 import com.example.wsplayer.databinding.ActivityPlayerBinding // Import ViewBinding
 
 class PlayerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPlayerBinding
-    private var currentPosition: Int = 0 // Pro uložení pozice při rekonfiguraci
+    private var player: ExoPlayer? = null // Instance ExoPlayeru
+
+    private var playWhenReady = true // Přehrát hned, jak bude připraveno
+    private var mediaItemIndex = 0 // Index aktuální položky (pokud by byl playlist)
+    private var playbackPosition = 0L // Pozice přehrávání v ms
 
     companion object {
         const val EXTRA_VIDEO_URL = "extra_video_url"
         const val EXTRA_VIDEO_TITLE = "extra_video_title" // Volitelný název videa
         private const val TAG = "PlayerActivity"
-        private const val PLAYBACK_POSITION = "playback_position"
+        // Klíče pro uložení stavu
+        private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
+        private const val STATE_MEDIA_ITEM_INDEX = "state_media_item_index"
+        private const val STATE_PLAYBACK_POSITION = "state_playback_position"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,145 +43,141 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(binding.root)
         Log.d(TAG, "onCreate called")
 
-        // Skrytí ActionBaru pro celoobrazovkový zážitek
-        supportActionBar?.hide()
-        // Povolení celoobrazovkového režimu (immersive mode)
-        window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        // Set the content to appear under the system bars so that the
-                        // content doesn't resize when the system bars hide and show.
-                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        // Hide the nav bar and status bar
-                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or View.SYSTEM_UI_FLAG_FULLSCREEN)
-
-
-        val videoUrl = intent.getStringExtra(EXTRA_VIDEO_URL)
-        val videoTitle = intent.getStringExtra(EXTRA_VIDEO_TITLE) // Můžete použít k nastavení titulku okna
-
-        if (videoTitle != null) {
-            title = videoTitle // Nastaví titulek okna, pokud je ActionBar viditelný (což není)
-            Log.d(TAG, "Video title: $videoTitle")
+        // Obnovení stavu, pokud existuje
+        if (savedInstanceState != null) {
+            playWhenReady = savedInstanceState.getBoolean(STATE_PLAY_WHEN_READY)
+            mediaItemIndex = savedInstanceState.getInt(STATE_MEDIA_ITEM_INDEX)
+            playbackPosition = savedInstanceState.getLong(STATE_PLAYBACK_POSITION)
+            Log.d(TAG, "Restored state: playWhenReady=$playWhenReady, itemIndex=$mediaItemIndex, position=$playbackPosition")
         }
+    }
 
+    // Inicializace přehrávače - volá se v onStart nebo onResume
+    private fun initializePlayer() {
+        val videoUrl = intent.getStringExtra(EXTRA_VIDEO_URL)
         if (videoUrl.isNullOrEmpty()) {
-            Log.e(TAG, "Video URL is null or empty. Finishing activity.")
+            Log.e(TAG, "Video URL is null or empty. Cannot initialize player.")
             Toast.makeText(this, "Chyba: URL videa není k dispozici.", Toast.LENGTH_LONG).show()
             finish()
             return
         }
+        Log.d(TAG, "Initializing player with URL: $videoUrl")
 
-        Log.d(TAG, "Video URL: $videoUrl")
+        // Vytvoření instance ExoPlayeru
+        player = ExoPlayer.Builder(this)
+            .build()
+            .also { exoPlayer ->
+                binding.playerView.player = exoPlayer // Připojení přehrávače k PlayerView
 
-        // Obnovení pozice přehrávání, pokud byla uložena
-        if (savedInstanceState != null) {
-            currentPosition = savedInstanceState.getInt(PLAYBACK_POSITION, 0)
-            Log.d(TAG, "Restoring playback position: $currentPosition ms")
-        }
+                // Vytvoření MediaItem z URL
+                val mediaItem = MediaItem.fromUri(videoUrl)
+                exoPlayer.setMediaItem(mediaItem)
 
+                // Nastavení listeneru pro sledování stavu přehrávače
+                exoPlayer.addListener(playbackStateListener)
 
-        setupVideoView(videoUrl)
+                // Obnovení stavu přehrávání
+                exoPlayer.playWhenReady = playWhenReady
+                exoPlayer.seekTo(mediaItemIndex, playbackPosition)
+                exoPlayer.prepare() // Příprava přehrávače
+                Log.d(TAG, "Player prepared, playWhenReady=$playWhenReady, seeking to $playbackPosition")
+            }
     }
 
-    private fun setupVideoView(videoUrl: String) {
-        val mediaController = MediaController(this)
-        mediaController.setAnchorView(binding.videoView)
-        binding.videoView.setMediaController(mediaController)
-
-        try {
-            val videoUri = Uri.parse(videoUrl)
-            binding.videoView.setVideoURI(videoUri)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting video URI: ${e.message}", e)
-            Toast.makeText(this, "Chyba při nastavování videa: ${e.message}", Toast.LENGTH_LONG).show()
-            finish()
-            return
+    // Uvolnění přehrávače - volá se v onStop nebo onPause
+    private fun releasePlayer() {
+        player?.let { exoPlayer ->
+            // Uložení aktuálního stavu před uvolněním
+            playbackPosition = exoPlayer.currentPosition
+            mediaItemIndex = exoPlayer.currentMediaItemIndex
+            playWhenReady = exoPlayer.playWhenReady
+            exoPlayer.removeListener(playbackStateListener) // Odstranění listeneru
+            exoPlayer.release() // Uvolnění zdrojů přehrávače
+            Log.d(TAG, "Player released. Saved state: playWhenReady=$playWhenReady, itemIndex=$mediaItemIndex, position=$playbackPosition")
         }
-
-        binding.videoView.setOnPreparedListener { mp ->
-            Log.d(TAG, "VideoView onPrepared. Duration: ${mp.duration} ms")
-            binding.progressBarPlayer.visibility = View.GONE
-            if (currentPosition > 0) {
-                Log.d(TAG, "Seeking to saved position: $currentPosition ms")
-                binding.videoView.seekTo(currentPosition)
-            }
-            binding.videoView.start()
-            mp.setOnInfoListener { _, what, _ ->
-                // Zobrazení/skrytí ProgressBaru podle stavu bufferování
-                when (what) {
-                    android.media.MediaPlayer.MEDIA_INFO_BUFFERING_START -> {
-                        binding.progressBarPlayer.visibility = View.VISIBLE
-                        true
-                    }
-                    android.media.MediaPlayer.MEDIA_INFO_BUFFERING_END -> {
-                        binding.progressBarPlayer.visibility = View.GONE
-                        true
-                    }
-                    else -> false
-                }
-            }
-        }
-
-        binding.videoView.setOnCompletionListener {
-            Log.d(TAG, "VideoView onCompletion.")
-            Toast.makeText(this, "Video dokončeno.", Toast.LENGTH_SHORT).show()
-            // Můžete zde aktivitu ukončit nebo nabídnout další akce
-            // finish()
-        }
-
-        binding.videoView.setOnErrorListener { mp, what, extra ->
-            Log.e(TAG, "VideoView onError. What: $what, Extra: $extra")
-            binding.progressBarPlayer.visibility = View.GONE
-            val errorMsg = when (what) {
-                android.media.MediaPlayer.MEDIA_ERROR_SERVER_DIED -> "Server pro přehrávání zemřel."
-                android.media.MediaPlayer.MEDIA_ERROR_UNKNOWN -> "Neznámá chyba přehrávání."
-                else -> "Došlo k chybě při přehrávání videa (what: $what, extra: $extra)."
-            }
-            Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
-            // Můžete zde aktivitu ukončit
-            // finish()
-            true // Vrácení true znamená, že jste chybu ošetřili
-        }
-
-        // Zobrazení ProgressBaru na začátku, než se video připraví
-        binding.progressBarPlayer.visibility = View.VISIBLE
+        player = null // Nastavení na null
     }
 
-    override fun onPause() {
-        super.onPause()
-        Log.d(TAG, "onPause called")
-        if (binding.videoView.isPlaying) {
-            currentPosition = binding.videoView.currentPosition
-            binding.videoView.pause()
-            Log.d(TAG, "Video paused. Current position saved: $currentPosition ms")
+    // Skrytí systémových lišt pro celoobrazovkový režim
+    private fun hideSystemUi() {
+        // Povolí zobrazení obsahu pod systémovými lištami
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Získání ovladače pro systémové lišty
+        WindowInsetsControllerCompat(window, binding.playerView).let { controller ->
+            // Skrytí systémových lišt (status bar, navigation bar)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            // Nastavení chování při gestu swipe (lišty se objeví dočasně)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+        Log.d(TAG, "System UI hidden")
+    }
+
+    // Životní cyklus Activity a správa přehrávače
+    override fun onStart() {
+        super.onStart()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            initializePlayer()
+        }
+        Log.d(TAG, "onStart called")
     }
 
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "onResume called")
-        if (!binding.videoView.isPlaying && currentPosition > 0) {
-            // Pokud bylo video pozastaveno a máme uloženou pozici,
-            // můžeme ho zde znovu spustit, ale onPrepared to již řeší přes seekTo.
-            // binding.videoView.seekTo(currentPosition)
-            // binding.videoView.start()
-            // Log.d(TAG, "Video resumed from position: $currentPosition ms")
+        hideSystemUi() // Skrytí UI při návratu do popředí
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || player == null) {
+            initializePlayer() // Inicializovat zde pro starší API nebo pokud ještě není inicializován
         }
+        Log.d(TAG, "onResume called")
     }
 
+    override fun onPause() {
+        super.onPause()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            releasePlayer() // Uvolnit zde pro starší API
+        }
+        Log.d(TAG, "onPause called")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            releasePlayer() // Uvolnit zde pro API >= 24
+        }
+        Log.d(TAG, "onStop called")
+    }
+
+    // Uložení stavu přehrávače pro případ rekonfigurace
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        // Uložení aktuální pozice přehrávání
-        currentPosition = binding.videoView.currentPosition
-        outState.putInt(PLAYBACK_POSITION, currentPosition)
-        Log.d(TAG, "onSaveInstanceState: Saving position $currentPosition ms")
+        // Uložení stavu, i když se přehrávač uvolňuje v onStop/onPause
+        outState.putBoolean(STATE_PLAY_WHEN_READY, playWhenReady)
+        outState.putInt(STATE_MEDIA_ITEM_INDEX, mediaItemIndex)
+        // Uložit aktuální pozici, pokud přehrávač existuje, jinak uložit poslední známou
+        outState.putLong(STATE_PLAYBACK_POSITION, player?.currentPosition ?: playbackPosition)
+        Log.d(TAG, "onSaveInstanceState: Saving state playWhenReady=$playWhenReady, itemIndex=$mediaItemIndex, position=${outState.getLong(STATE_PLAYBACK_POSITION)}")
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "onDestroy called")
-        binding.videoView.stopPlayback() // Uvolnění zdrojů VideoView
+    // Listener pro sledování stavu přehrávače a chyb
+    private val playbackStateListener: Player.Listener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            val stateString: String = when (playbackState) {
+                ExoPlayer.STATE_IDLE -> "ExoPlayer.STATE_IDLE      -"
+                ExoPlayer.STATE_BUFFERING -> "ExoPlayer.STATE_BUFFERING -"
+                ExoPlayer.STATE_READY -> "ExoPlayer.STATE_READY     -"
+                ExoPlayer.STATE_ENDED -> "ExoPlayer.STATE_ENDED     -"
+                else -> "UNKNOWN_STATE             -"
+            }
+            Log.d(TAG, "changed state to $stateString")
+            // Zde můžete reagovat na změny stavu, např. zobrazit/skrýt ProgressBar
+            // binding.progressBarPlayer.visibility = if (playbackState == ExoPlayer.STATE_BUFFERING) View.VISIBLE else View.GONE
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // Ošetření chyby přehrávání
+            Log.e(TAG, "Player Error: ${error.errorCodeName} - ${error.message}", error) // Použití errorCodeName pro lepší info
+            Toast.makeText(this@PlayerActivity, "Chyba přehrávání (${error.errorCodeName}): ${error.message}", Toast.LENGTH_LONG).show()
+            // Můžete zde aktivitu ukončit nebo zobrazit chybovou zprávu
+            // finish()
+        }
     }
 }

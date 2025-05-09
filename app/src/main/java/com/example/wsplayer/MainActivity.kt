@@ -7,6 +7,7 @@ import android.content.res.Configuration // Import pro Configuration
 import android.os.Bundle
 import android.os.Handler // Import pro Handler (pro zpoždění)
 import android.os.Looper // Import pro Looper (pro zpoždění)
+import android.util.Log // Import pro Logování
 import android.view.View // Import pro View (GONE, VISIBLE)
 import android.view.inputmethod.InputMethodManager // Import pro skrývání klávesnice
 import android.widget.Toast // Import pro Toast zprávy
@@ -17,9 +18,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.wsplayer.ui.auth.LoginViewModel
 import com.example.wsplayer.ui.auth.LoginViewModelFactory
 
-// Importy pro Repository, AuthTokenManager, ApiService - potřeba pro Factory volání (ZKONTROLUJTE CESTU)
-// import com.example.wsplayer.data.repository.WebshareRepository // Není přímo potřeba zde, pokud vše řeší Factory
-// import com.example.wsplayer.AuthTokenManager // Není přímo potřeba zde
+// Importy pro AuthTokenManager a ApiService - potřeba pro Factory volání (ZKONTROLUJTE CESTU)
+import com.example.wsplayer.AuthTokenManager // Import AuthTokenManager
 import com.example.wsplayer.data.api.WebshareApiService // Import ApiService
 
 // Import pro SearchActivity (pro přesměrování) (ZKONTROLUJTE CESTU)
@@ -31,51 +31,50 @@ import com.example.wsplayer.R
 // Import pro View Binding (vygenerovaná třída) (ZKONTROLUJTE CESTU)
 import com.example.wsplayer.databinding.ActivityMainBinding
 
-// Import pro vaši budoucí TV aktivitu (UPRAVTE CESTU, POKUD JE JINÁ)
-// import com.example.wsplayer.ui.tv.TvMainActivity
+// Import pro TV aktivity (UPRAVTE CESTY, POKUD JE TO NUTNÉ)
+import com.example.wsplayer.ui.tv.CustomTvLoginActivity // Používáme novou CustomTvLoginActivity
+import com.example.wsplayer.ui.tv.TvMainActivity
 
 
-// Hlavní aktivita aplikace - slouží jako přihlašovací obrazovka
+// Hlavní aktivita aplikace - slouží jako přihlašovací obrazovka nebo brána pro TV
 class MainActivity : AppCompatActivity() {
 
-    // Binding pro UI prvky v activity_main.xml
     private lateinit var binding: ActivityMainBinding
-
-    // ViewModel pro správu stavu přihlášení
     private lateinit var viewModel: LoginViewModel
+    private val TAG = "MainActivity" // Přidán TAG pro logování
 
-    // --- Metoda volaná při vytvoření Activity ---
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        println("MainActivity: >>> onCreate spuštěn. PID: ${android.os.Process.myPid()}")
+        Log.d(TAG, ">>> onCreate spuštěn. PID: ${android.os.Process.myPid()}")
 
         // --- Detekce Android TV ---
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
         if (uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION) {
-            println("MainActivity: Detekováno TV zařízení. Spouštím TvMainActivity.")
-            // Předpokládáme, že vaše TV aktivita je com.example.wsplayer.ui.tv.TvMainActivity
-            // Pokud ji ještě nemáte, toto způsobí chybu při spuštění na TV.
-            // Nezapomeňte ji vytvořit a zaregistrovat v AndroidManifest.xml s LEANBACK_LAUNCHER.
-            try {
-                val tvIntent = Intent()
-                // Použití plně kvalifikovaného názvu třídy pro Intent, aby se předešlo problémům s importy, pokud třída ještě neexistuje
-                tvIntent.setClassName(this, "com.example.wsplayer.ui.tv.TvMainActivity")
+            Log.d(TAG, "Detekováno TV zařízení.")
+            // Zkontrolovat, zda je uživatel přihlášen
+            val authTokenManager = AuthTokenManager(this) // Vytvoření instance pro kontrolu tokenu
+            val token = authTokenManager.getAuthToken()
+
+            if (token.isNullOrEmpty()) {
+                // Není přihlášen -> Spustit CustomTvLoginActivity
+                Log.d(TAG, "Není token, spouštím CustomTvLoginActivity.")
+                val loginIntent = Intent(this, CustomTvLoginActivity::class.java) // Změna na CustomTvLoginActivity
+                startActivity(loginIntent)
+            } else {
+                // Je přihlášen -> Spustit TvMainActivity
+                Log.d(TAG, "Token nalezen, spouštím TvMainActivity.")
+                val tvIntent = Intent(this, TvMainActivity::class.java)
+                // Vyčistit task a nastavit TvMainActivity jako nový kořen
                 tvIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                 startActivity(tvIntent)
-            } catch (e: Exception) {
-                // Pokud TvMainActivity ještě neexistuje nebo je špatně nakonfigurována, zobrazíme chybu
-                // a pokračujeme s mobilním UI, aby aplikace nespadla.
-                println("MainActivity: Chyba při spouštění TvMainActivity: ${e.message}")
-                Toast.makeText(this, "Chyba spouštění TV rozhraní, zobrazuji mobilní.", Toast.LENGTH_LONG).show()
-                setupMobileUi() // Pokračovat s mobilním UI jako fallback
-                return // Ukončit zde, pokud setupMobileUi() neobsahuje return
             }
-            finish() // Ukončíme mobilní MainActivity, aby nebyla v zásobníku
+            finish() // Ukončit tuto MainActivity, protože jsme přesměrovali na TV aktivitu
+            Log.d(TAG, "MainActivity (mobilní brána) ukončena pro TV.")
             return   // Důležité, aby se nevykonal zbytek onCreate pro mobilní verzi
         }
 
         // --- Pokud nejsme na TV, pokračuj s normálním nastavením pro mobilní MainActivity ---
-        println("MainActivity: Detekováno mobilní zařízení. Nastavuji mobilní UI.")
+        Log.d(TAG, "Detekováno mobilní zařízení. Nastavuji mobilní UI.")
         setupMobileUi()
     }
 
@@ -83,7 +82,7 @@ class MainActivity : AppCompatActivity() {
         // --- Nastavení uživatelského rozhraní pomocí View Bindingu ---
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        println("MainActivity: Mobilní ContentView nastaven.")
+        Log.d(TAG, "Mobilní ContentView nastaven.")
 
         // --- Inicializace ViewModelu pomocí Factory ---
         val apiService = WebshareApiService.create()
@@ -92,12 +91,12 @@ class MainActivity : AppCompatActivity() {
 
 
         // --- Sledování stavu přihlašování z ViewModelu ---
-        println("MainActivity: Nastavuji Observer pro viewModel.loginState.")
+        Log.d(TAG, "Nastavuji Observer pro viewModel.loginState.")
         viewModel.loginState.observe(this) { state ->
-            println("MainActivity: Observer loginState spuštěn. Aktuální stav: $state")
+            Log.d(TAG, "Observer loginState spuštěn. Aktuální stav: $state")
             when (state) {
                 is LoginViewModel.LoginState.Idle -> {
-                    println("MainActivity: LoginState je Idle.")
+                    Log.d(TAG, "LoginState je Idle.")
                     binding.progressBar.visibility = View.GONE
                     binding.buttonLogin.isEnabled = true
                     binding.errorText.visibility = View.GONE
@@ -111,7 +110,7 @@ class MainActivity : AppCompatActivity() {
                     binding.logoutButton.visibility = View.GONE
                 }
                 is LoginViewModel.LoginState.Loading -> {
-                    println("MainActivity: LoginState je Loading.")
+                    Log.d(TAG, "LoginState je Loading.")
                     binding.progressBar.visibility = View.VISIBLE
                     binding.buttonLogin.isEnabled = false
                     binding.errorText.visibility = View.GONE
@@ -124,7 +123,7 @@ class MainActivity : AppCompatActivity() {
                     binding.textViewTitle.visibility = View.GONE
                 }
                 is LoginViewModel.LoginState.Success -> {
-                    println("MainActivity: >>> Observer LoginState.Success spuštěn. Token získán.")
+                    Log.d(TAG, ">>> Observer LoginState.Success spuštěn. Token získán.")
                     binding.progressBar.visibility = View.GONE
                     binding.buttonLogin.isEnabled = true
 
@@ -138,21 +137,21 @@ class MainActivity : AppCompatActivity() {
 
                     Toast.makeText(this, getString(R.string.login_success_toast), Toast.LENGTH_SHORT).show()
 
-                    println("MainActivity: Spouštím SearchActivity s flags NEW_TASK | CLEAR_TASK.")
+                    Log.d(TAG, "Spouštím SearchActivity s flags NEW_TASK | CLEAR_TASK.")
                     val intent = Intent(this, SearchActivity::class.java)
                     intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                     startActivity(intent)
-                    println("MainActivity: SearchActivity voláno startActivity().")
+                    Log.d(TAG, "SearchActivity voláno startActivity().")
 
-                    println("MainActivity: finish() ZAVOLÁNO po krátkém zpoždění (200ms).")
+                    Log.d(TAG, "finish() ZAVOLÁNO po krátkém zpoždění (200ms).")
                     Handler(Looper.getMainLooper()).postDelayed({
-                        println("MainActivity: finish() provádím z Handleru.")
+                        Log.d(TAG, "finish() provádím z Handleru.")
                         finish()
-                        println("MainActivity: finish() volání dokončeno z Handleru.")
+                        Log.d(TAG, "finish() volání dokončeno z Handleru.")
                     }, 200)
                 }
                 is LoginViewModel.LoginState.Error -> {
-                    println("MainActivity: LoginState je Error.")
+                    Log.d(TAG, "LoginState je Error.")
                     binding.progressBar.visibility = View.GONE
                     binding.buttonLogin.isEnabled = true
 
@@ -173,9 +172,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         // --- Nastavení posluchače na tlačítko přihlášení ---
-        println("MainActivity: Nastavuji OnClickListener pro tlačítko Přihlásit.")
+        Log.d(TAG, "Nastavuji OnClickListener pro tlačítko Přihlásit.")
         binding.buttonLogin.setOnClickListener {
-            println("MainActivity: Kliknuto na tlačítko Přihlásit.")
+            Log.d(TAG, "Kliknuto na tlačítko Přihlásit.")
             val username = binding.editTextUsername.text.toString().trim()
             val password = binding.editTextPassword.text.toString()
             val rememberMe = binding.checkBoxRememberMe.isChecked
@@ -184,21 +183,20 @@ class MainActivity : AppCompatActivity() {
 
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
-            println("MainActivity: Klávesnice skryta.")
+            Log.d(TAG, "Klávesnice skryta.")
         }
 
         binding.logoutButton.setOnClickListener {
-            println("MainActivity: Kliknuto na tlačítko Odhlásit (v MainActivity, nemělo by zde být).")
+            Log.d(TAG, "Kliknuto na tlačítko Odhlásit (v MainActivity, nemělo by zde být).")
         }
 
-        println("MainActivity: <<< Mobilní UI onCreate dokončen.")
+        Log.d(TAG, "<<< Mobilní UI onCreate dokončen.")
     }
 
 
-    // Metoda volaná, když Activity končí (např. po finish())
     override fun onDestroy() {
-        println("MainActivity: >>> onDestroy spuštěn.")
+        Log.d(TAG, ">>> onDestroy spuštěn.")
         super.onDestroy()
-        println("MainActivity: <<< onDestroy dokončen.")
+        Log.d(TAG, "<<< onDestroy dokončen.")
     }
 }
