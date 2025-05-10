@@ -25,8 +25,8 @@ import com.example.wsplayer.R // Váš R súbor
 import com.example.wsplayer.data.api.WebshareApiService
 import com.example.wsplayer.data.models.FileLinkState
 import com.example.wsplayer.data.models.FileModel
-import com.example.wsplayer.data.models.LoadMoreAction
-import com.example.wsplayer.data.models.SearchState
+import com.example.wsplayer.data.models.LoadMoreAction // Aj keď ho teraz nepoužívame, necháme pre budúcnosť
+import com.example.wsplayer.data.models.SearchState // Tento stav už priamo nepoužívame pre zobrazenie
 // Explicitné importy pre dátové modely seriálov
 import com.example.wsplayer.data.models.OrganizedSeries
 import com.example.wsplayer.data.models.SeriesSeason
@@ -49,7 +49,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
     }
     private var fileSelectedListener: OnFileSelectedInSearchListener? = null
 
-    private lateinit var rowsAdapter: ArrayObjectAdapter
+    private lateinit var rowsAdapter: ArrayObjectAdapter // Hlavný adapter pre všetky riadky
     private val viewModel: SearchViewModel by lazy {
         val factory = SearchViewModelFactory(
             requireActivity().application,
@@ -60,10 +60,11 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
 
     private val handler = Handler(Looper.getMainLooper())
     private var searchQueryRunnable: Runnable? = null
-    private val SEARCH_DELAY_MS = 500L
+    private val SEARCH_DELAY_MS = 500L // Oneskorenie pre onQueryTextChange
 
-    private var resultsListRowAdapter: ArrayObjectAdapter? = null // Pre bežné výsledky, ak by sme ich kombinovali
-    private var loadMoreRow: ListRow? = null // Reference na řádek "Načíst další"
+    // Tieto už nebudeme priamo používať pre výsledky seriálov, rowsAdapter bude obsahovať ListRow pre každú sériu
+    // private var resultsListRowAdapter: ArrayObjectAdapter? = null
+    // private var loadMoreRow: ListRow? = null
 
     private val REQUEST_SPEECH = 0x00000010 // Kód pre rozpoznávanie reči
 
@@ -81,10 +82,10 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
 
-        title = getString(R.string.search_title_tv) // Titulok môžeme nastaviť tu
+        title = getString(R.string.search_title_tv)
 
         setupResultsAdapter()
-        setSearchResultProvider(this)
+        setSearchResultProvider(this) // Tento fragment poskytuje výsledky pre SearchSupportFragment
         setupEventListeners()
     }
 
@@ -109,17 +110,22 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
 
     private fun setupResultsAdapter() {
         val listRowPresenter = ListRowPresenter(FocusHighlight.ZOOM_FACTOR_MEDIUM)
+        listRowPresenter.shadowEnabled = true // Zapnutie tieňov pre lepší vzhľad kariet
+        listRowPresenter.selectEffectEnabled = true // Efekt pri výbere karty
         rowsAdapter = ArrayObjectAdapter(listRowPresenter)
+        // Adapter pre SearchSupportFragment sa nastavuje cez getResultsAdapter()
     }
 
     private fun observeViewModel() {
         Log.d(TAG, "Setting up observers for ViewModel.")
+
+        // Pozorovanie stavu organizácie seriálu
         viewModel.seriesOrganizationState.observe(viewLifecycleOwner) { state ->
             Log.d(TAG, "SeriesOrganizationState changed: $state")
             when (state) {
                 is SeriesOrganizationState.Loading -> {
                     Log.d(TAG, "SeriesOrganizationState: Loading")
-                    rowsAdapter.clear()
+                    rowsAdapter.clear() // Vyčistiť predchádzajúce výsledky/správy
                     val header = HeaderItem(0, "Spracovávam...")
                     val messagePresenter = TvBrowseFragment.SingleTextViewPresenter()
                     val messageAdapter = ArrayObjectAdapter(messagePresenter)
@@ -136,8 +142,8 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
                     displayErrorMessage(state.message)
                     fileSelectedListener?.onFileSelectedInSearch(null)
                 }
-                is SeriesOrganizationState.NoEpisodesFound -> { // Tento stav sa už nepoužíva, nahradený Success s prázdnymi zoznamami
-                    Log.d(TAG, "SeriesOrganizationState: NoEpisodesFound (deprecated, should be Success with empty lists)")
+                is SeriesOrganizationState.NoEpisodesFound -> { // Tento stav je teraz nahradený Success s prázdnymi zoznamami
+                    Log.d(TAG, "SeriesOrganizationState: NoEpisodesFound (should be Success with empty lists)")
                     displayErrorMessage(getString(R.string.series_no_episodes_found))
                     fileSelectedListener?.onFileSelectedInSearch(null)
                 }
@@ -149,7 +155,9 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
             }
         }
 
+        // Pozorovanie stavu odkazu pre prehrávanie
         viewModel.fileLinkState.observe(viewLifecycleOwner) { state ->
+            // ... (kód pre fileLinkState zostáva rovnaký)
             when (state) {
                 is FileLinkState.LoadingLink -> {
                     Log.d(TAG, "FileLinkState: LoadingLink")
@@ -192,7 +200,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
     private fun displayInitialSearchMessage() {
         rowsAdapter.clear()
         val header = HeaderItem(0, getString(R.string.search_title_tv))
-        val messagePresenter = TvBrowseFragment.SingleTextViewPresenter()
+        val messagePresenter = TvBrowseFragment.SingleTextViewPresenter() // Znovu použijeme presenter z TvBrowseFragment
         val messageAdapter = ArrayObjectAdapter(messagePresenter)
         messageAdapter.add(getString(R.string.search_series_prompt))
         rowsAdapter.add(ListRow(header, messageAdapter))
@@ -216,37 +224,41 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         rowsAdapter.clear()
         Log.d(TAG, "Displaying organized results for: ${series.title}, Other videos count: ${otherVideos.size}")
 
-        var hasContent = false
+        var hasContentDisplayed = false
         val cardPresenter = CardPresenter()
+        var headerIdCounter = 0L // Pre unikátne ID hlavičiek
 
         // Zobrazenie sérií
         if (series.seasons.isNotEmpty()) {
-            series.getSortedSeasons().forEachIndexed { index, season ->
-                val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                season.episodes.forEach { episode ->
-                    listRowAdapter.add(episode.fileModel)
+            series.getSortedSeasons().forEach { season ->
+                if (season.episodes.isNotEmpty()) { // Zobraziť sériu len ak má epizódy
+                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+                    season.episodes.forEach { episode ->
+                        // fileModel v SeriesEpisode by už mal mať nastavené seriesName, seasonNumber atď.
+                        listRowAdapter.add(episode.fileModel)
+                    }
+                    val header = HeaderItem(headerIdCounter++, "Séria ${season.seasonNumber} (${series.title})")
+                    rowsAdapter.add(ListRow(header, listRowAdapter))
+                    hasContentDisplayed = true
                 }
-                // ID hlavičky by malo byť unikátne pre každý riadok
-                val header = HeaderItem(index.toLong(), "Séria ${season.seasonNumber} (${series.title})")
-                rowsAdapter.add(ListRow(header, listRowAdapter))
             }
-            hasContent = true
         }
 
         // Zobrazenie ostatných videí (filmov)
         if (otherVideos.isNotEmpty()) {
-            val moviesHeaderId = (series.seasons.size).toLong() // Unikátne ID pre riadok filmov
-            val moviesHeader = HeaderItem(moviesHeaderId, "Filmy a iné videá")
+            val moviesHeader = HeaderItem(headerIdCounter++, "Filmy a iné videá")
             val moviesListAdapter = ArrayObjectAdapter(cardPresenter)
             otherVideos.forEach { fileModel ->
+                // Tu môžeme FileModel priamo pridať, ak už má vyplnené potrebné polia
+                // alebo ho upraviť, ak je to nutné pre CardPresenter
                 moviesListAdapter.add(fileModel)
             }
             rowsAdapter.add(ListRow(moviesHeader, moviesListAdapter))
-            hasContent = true
+            hasContentDisplayed = true
         }
 
-        if (!hasContent) {
-            // Ak sa nenašli ani série, ani iné videá
+        if (!hasContentDisplayed) {
+            // Ak sa nenašli ani série, ani iné videá, ale vyhľadávanie bolo úspešné
             displayErrorMessage(getString(R.string.series_no_episodes_found_for, series.title))
         } else {
             fileSelectedListener?.onFileSelectedInSearch(null) // Vyčistiť detaily na začiatku
@@ -256,23 +268,20 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
 
     override fun onQueryTextChange(newQuery: String?): Boolean {
         Log.d(TAG, "onQueryTextChange: $newQuery")
-        searchQueryRunnable?.let { handler.removeCallbacks(it) }
-
-        val query = newQuery?.trim() ?: ""
-        if (query.isEmpty()) {
+        // Pre seriály zvyčajne chceme vyhľadávať až po potvrdení (Submit),
+        // aby sme zbytočne nezaťažovali API počas písania.
+        // Ak by sme chceli návrhy, tu by bola iná logika.
+        // Ak je text prázdny, môžeme vyčistiť výsledky.
+        if (newQuery.isNullOrEmpty()) {
             rowsAdapter.clear()
             displayInitialSearchMessage()
             fileSelectedListener?.onFileSelectedInSearch(null)
-            return true
         }
-        // Pre seriály spúšťame vyhľadávanie až po potvrdení
-        return true
+        return true // True znamená, že sme zmenu spracovali
     }
 
     override fun onQueryTextSubmit(query: String?): Boolean {
         Log.d(TAG, "onQueryTextSubmit: $query")
-        searchQueryRunnable?.let { handler.removeCallbacks(it) }
-
         val finalQuery = query?.trim() ?: ""
         if (finalQuery.isNotEmpty()) {
             performSeriesSearch(finalQuery)
@@ -286,8 +295,8 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
 
     private fun performSeriesSearch(query: String) {
         Log.d(TAG, "Performing series search and organization for: $query")
-        fileSelectedListener?.onFileSelectedInSearch(null)
-        viewModel.searchAndOrganizeSeries(query)
+        fileSelectedListener?.onFileSelectedInSearch(null) // Vyčistiť detaily pred novým hľadaním
+        viewModel.searchAndOrganizeSeries(query) // Volanie novej metódy vo ViewModeli
     }
 
 
@@ -298,17 +307,18 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
 
     private fun setupEventListeners() {
         setOnItemViewClickedListener { itemViewHolder, item, rowViewHolder, row ->
+            // Kliknutie na LoadMoreAction tu už neriešime,
+            // pretože stránkovanie pre seriály je teraz riešené inak (alebo zatiaľ nie je)
             if (item is FileModel) {
                 Log.d(TAG, "Episode or Movie clicked: ${item.name}")
                 viewModel.getFileLinkForFile(item)
             }
-            // Pre LoadMoreAction tu nemáme logiku, keďže stránkovanie sérií zatiaľ neriešime
         }
         setOnItemViewSelectedListener { itemViewHolder, item, rowViewHolder, row ->
             if (item is FileModel) {
                 Log.d(TAG,"Selected FileModel in Search: ${item.name}")
                 fileSelectedListener?.onFileSelectedInSearch(item)
-            } else {
+            } else { // Ak je vybraná hlavička alebo iný typ položky
                 fileSelectedListener?.onFileSelectedInSearch(null)
             }
         }
@@ -321,7 +331,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
             if (!results.isNullOrEmpty()) {
                 val recognizedText = results[0]
                 Log.d(TAG, "Voice search recognized: $recognizedText")
-                setSearchQuery(recognizedText, true)
+                setSearchQuery(recognizedText, true) // Nastaví text a odošle (zavolá onQueryTextSubmit)
             }
         }
         super.onActivityResult(requestCode, resultCode, data)

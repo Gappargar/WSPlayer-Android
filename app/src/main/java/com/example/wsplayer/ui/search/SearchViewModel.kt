@@ -11,13 +11,13 @@ import com.example.wsplayer.data.repository.WebshareRepository // ZKONTROLUJTE C
 // **Importy pre dátové triedy a sealed classy z vášho data.models balíčku**
 import com.example.wsplayer.data.models.*
 import com.example.wsplayer.data.models.ParsedEpisodeInfo
-import com.example.wsplayer.utils.SeriesFileParser
+import com.example.wsplayer.utils.SeriesFileParser // <-- Import vášho parsera
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers // Pre prepnutie kontextu (background vlákna)
+import kotlinx.coroutines.launch // Pre spúšťanie coroutines
+import kotlinx.coroutines.withContext // Pre prepnutie kontextu vnútri coroutine
 
-import android.util.Log
+import android.util.Log // Logovanie
 
 /**
  * Sealed class reprezentujúca stavy načítavania histórie.
@@ -37,10 +37,10 @@ sealed class SeriesOrganizationState {
     object Loading : SeriesOrganizationState()
     data class Success(
         val series: OrganizedSeries,
-        val otherVideos: List<FileModel> // Zoznam filmov a iných nezaradených videí
+        val otherVideos: List<FileModel>
     ) : SeriesOrganizationState()
     data class Error(val message: String) : SeriesOrganizationState()
-    object NoEpisodesFound : SeriesOrganizationState() // Tento stav znamená, že sa nenašli ŽIADNE epizódy pre hľadaný seriál
+    object NoEpisodesFound : SeriesOrganizationState()
 }
 
 
@@ -81,7 +81,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
     var currentPage: Int = 0
         private set
     private val resultsPerPage = 50
-    private val seriesResultsLimit = 200 // Limit pre vyhľadávanie seriálov
+    private val seriesSearchLimitPerPage = 150 // Limit pre jeden dopyt pri hľadaní seriálu
 
 
     init {
@@ -277,44 +277,99 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
         _seriesOrganizationState.postValue(SeriesOrganizationState.Loading)
 
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. Vyhľadať súbory na Webshare
-            // Pre seriály vždy hľadáme len videá a radíme podľa relevancie/novosti
-            val searchResult = repository.searchFiles(
-                query = seriesNameQuery,
-                category = "video", // Vždy len videá pre seriály
-                sort = "recent",    // Alebo "rating"
-                limit = seriesResultsLimit,
-                offset = 0
-            )
+            val allFoundFilesSet = mutableSetOf<FileModel>()
 
-            if (searchResult.isFailure) {
-                val errorMsg = searchResult.exceptionOrNull()?.message ?: "Chyba pri vyhľadávaní súborov pre seriál."
-                Log.e(TAG, "Failed to search files for series '$seriesNameQuery': $errorMsg")
-                _seriesOrganizationState.postValue(SeriesOrganizationState.Error(errorMsg))
+            val originalQuery = seriesNameQuery.trim()
+            val normalizedOriginalQuery = originalQuery.lowercase().replace(".", " ")
+            val queryKeywords = normalizedOriginalQuery.split(" ").filter { it.length > 1 }
+
+
+            // 1. Generovanie a vykonanie viacerých vyhľadávacích dopytov
+            val searchQueries = mutableListOf<String>()
+            searchQueries.add(originalQuery) // Presný názov ako zadal používateľ
+            if (originalQuery.contains(" ")) {
+                searchQueries.add(originalQuery.replace(" ", ".")) // Varianta s bodkami
+            }
+            if (originalQuery.contains(".")) {
+                searchQueries.add(originalQuery.replace(".", " ")) // Varianta s medzerami (ak pôvodne boli bodky)
+            }
+            // Pridanie všeobecnejších dopytov, ak pôvodný dopyt neobsahuje špecifické kľúčové slová
+            if (!originalQuery.lowercase().contains("season") && !originalQuery.lowercase().contains("séria")) {
+                searchQueries.add("$originalQuery season")
+                searchQueries.add("$originalQuery séria")
+            }
+            if (!originalQuery.lowercase().matches(Regex(".*s\\d{1,2}.*"))) { // Ak neobsahuje Sxx
+                searchQueries.add("$originalQuery S01")
+            }
+
+            val distinctSearchQueries = searchQueries.distinct()
+            Log.d(TAG, "Generated search queries for series: $distinctSearchQueries")
+
+            for (query in distinctSearchQueries) {
+                Log.d(TAG, "Searching for series with query: '$query'")
+                var currentOffset = 0
+                var hasMoreResults = true
+                var accumulatedResultsForQuery = 0 // Počet načítaných pre TENTO dopyt
+
+                // Zvýšime limit pre jeden API request, ale obmedzíme celkový počet načítaných súborov na dopyt
+                val querySpecificLimit = 100 // Napr. 100 na stránku pre tento dopyt
+                val maxFilesPerQueryType = 300 // Max 300 súborov na jeden typ dopytu
+
+                while (hasMoreResults && accumulatedResultsForQuery < maxFilesPerQueryType) {
+                    val searchResult = repository.searchFiles(
+                        query = query,
+                        category = "video",
+                        // ***** ZMENA TRIEDENIA *****
+                        sort = "rating", // Skúsime "rating", alebo null pre API default (relevancia)
+                        limit = querySpecificLimit,
+                        offset = currentOffset
+                    )
+
+                    if (searchResult.isSuccess) {
+                        val response = searchResult.getOrNull()
+                        response?.files?.let { files ->
+                            if (files.isNotEmpty()) {
+                                // Predbežné filtrovanie: súbor musí obsahovať VŠETKY kľúčové slová z PÔVODNÉHO normalizovaného dopytu
+                                val relevantFiles = files.filter { file ->
+                                    val normalizedFileName = file.name.lowercase().replace(".", " ")
+                                    queryKeywords.all { keyword -> normalizedFileName.contains(keyword) }
+                                }
+                                allFoundFilesSet.addAll(relevantFiles)
+                                accumulatedResultsForQuery += files.size // Počítame všetky vrátené API, nie len relevantné
+                                currentOffset += querySpecificLimit
+                                hasMoreResults = files.size == querySpecificLimit && response.total > accumulatedResultsForQuery
+                                Log.d(TAG, "Query '$query', offset $currentOffset: API returned ${files.size} (total API: ${response.total}). Filtered to ${relevantFiles.size}. Total unique so far: ${allFoundFilesSet.size}")
+                            } else {
+                                hasMoreResults = false
+                            }
+                        } ?: run { hasMoreResults = false }
+                    } else {
+                        Log.w(TAG, "Search query '$query' failed: ${searchResult.exceptionOrNull()?.message}")
+                        hasMoreResults = false
+                    }
+                    if (!hasMoreResults) break
+                }
+            }
+
+            if (allFoundFilesSet.isEmpty()) {
+                Log.d(TAG, "No files found on Webshare for any series query variations of: '$originalQuery'")
+                _seriesOrganizationState.postValue(SeriesOrganizationState.Success(OrganizedSeries(title = originalQuery), emptyList()))
                 return@launch
             }
 
-            val foundFiles = searchResult.getOrNull()?.files
-            if (foundFiles.isNullOrEmpty()) {
-                Log.d(TAG, "No files found on Webshare for series query: '$seriesNameQuery'")
-                // Ak sa nenašli žiadne súbory, pošleme prázdny OrganizedSeries a prázdny zoznam otherVideos
-                _seriesOrganizationState.postValue(SeriesOrganizationState.Success(OrganizedSeries(title = seriesNameQuery), emptyList()))
-                return@launch
-            }
+            Log.d(TAG, "Found ${allFoundFilesSet.size} total unique potential files for series '$originalQuery'. Starting parsing...")
 
-            Log.d(TAG, "Found ${foundFiles.size} potential files for series '$seriesNameQuery'. Starting parsing...")
-
-            val organizedSeries = OrganizedSeries(title = seriesNameQuery)
-            val unclassifiedVideos = mutableListOf<FileModel>() // Zoznam pre filmy/iné videá
+            val organizedSeries = OrganizedSeries(title = originalQuery)
+            val unclassifiedVideos = mutableListOf<FileModel>()
             var episodesFoundCount = 0
 
-            foundFiles.forEach { fileModel ->
-                val parsedInfo: ParsedEpisodeInfo? = SeriesFileParser.parseEpisodeInfo(fileModel.name, seriesNameQuery)
+            allFoundFilesSet.forEach { fileModel ->
+                // Pre parsovanie použijeme pôvodný dopyt používateľa ako referenčný názov seriálu
+                val parsedInfo: ParsedEpisodeInfo? = SeriesFileParser.parseEpisodeInfo(fileModel.name, originalQuery)
                 if (parsedInfo != null) {
-                    // Je to epizóda seriálu
                     val seriesEpisode = SeriesEpisode(
-                        fileModel = fileModel.copy( // Doplníme informácie do FileModel pre UI
-                            seriesName = seriesNameQuery,
+                        fileModel = fileModel.copy(
+                            seriesName = originalQuery,
                             seasonNumber = parsedInfo.seasonNumber,
                             episodeNumber = parsedInfo.episodeNumber,
                             videoQuality = parsedInfo.quality,
@@ -330,27 +385,18 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                     }
                     season.addAndSortEpisode(seriesEpisode)
                     episodesFoundCount++
-                    Log.d(TAG, "Organized: S${parsedInfo.seasonNumber}E${parsedInfo.episodeNumber} - ${fileModel.name}")
                 } else {
-                    // Nie je to epizóda seriálu, ale je to video - pridať do otherVideos
-                    // Overíme, či má video príponu (jednoduchá kontrola)
-                    val lowerCaseName = fileModel.name.lowercase()
-                    if (lowerCaseName.endsWith(".mkv") || lowerCaseName.endsWith(".mp4") || lowerCaseName.endsWith(".avi") || lowerCaseName.endsWith(".mov") || lowerCaseName.endsWith(".wmv")) {
-                        unclassifiedVideos.add(fileModel)
-                        Log.d(TAG, "Added to unclassified videos: ${fileModel.name}")
-                    } else {
-                        Log.d(TAG, "Could not parse series info and not a clear video file: ${fileModel.name}")
-                    }
+                    unclassifiedVideos.add(fileModel)
+                    Log.d(TAG, "Added to unclassified videos (could not parse S/E): ${fileModel.name}")
                 }
             }
 
             if (episodesFoundCount > 0 || unclassifiedVideos.isNotEmpty()) {
-                Log.d(TAG, "Successfully processed files for '$seriesNameQuery'. Episodes: $episodesFoundCount, Other Videos: ${unclassifiedVideos.size}.")
+                Log.d(TAG, "Successfully processed files for '$originalQuery'. Episodes: $episodesFoundCount, Other Videos: ${unclassifiedVideos.size}.")
                 _seriesOrganizationState.postValue(SeriesOrganizationState.Success(organizedSeries, unclassifiedVideos))
             } else {
-                Log.d(TAG, "No episodes or other videos could be reliably parsed for '$seriesNameQuery'.")
-                // Použijeme Success s prázdnymi dátami, aby UI mohlo zobraziť "nič nenájdené"
-                _seriesOrganizationState.postValue(SeriesOrganizationState.Success(OrganizedSeries(title = seriesNameQuery), emptyList()))
+                Log.d(TAG, "No episodes or other videos could be reliably parsed for '$originalQuery'.")
+                _seriesOrganizationState.postValue(SeriesOrganizationState.Success(OrganizedSeries(title = originalQuery), emptyList()))
             }
         }
     }
