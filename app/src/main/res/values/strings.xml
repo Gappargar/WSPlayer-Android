@@ -42,6 +42,11 @@
     <string name="history_header">Historie stahování</string>
     <string name="history_empty">Vaše historie stahování je prázdná.</string>
     <string name="search_title_tv">Hledat videa</string>
+    <string name="search_hint_tv_series">Zadajte název seriálu...</string>
+    <string name="series_no_episodes_found">Pre tento seriál sa nepodarilo nájsť žiadne epizódy.</string>
+    <string name="series_no_episodes_found_for">Pre seriál \'%s\' sa nepodarilo nájsť žiadne epizódy.</string>
+    <string name="error_title">Chyba</string>
+    <string name="search_series_prompt">Zadajte názov seriálu a potvrďte.</string>
 
     <string-array name="search_categories_array">
         <item>Všechny kategorie</item>

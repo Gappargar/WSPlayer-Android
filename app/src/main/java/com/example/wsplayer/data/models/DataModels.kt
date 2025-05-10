@@ -1,6 +1,6 @@
 package com.example.wsplayer.data.models // Váš balíček - ZKONTROLUJTE
 
-// Tento soubor by měl obsahovat VŠECHNY datové třídy pro API odpovědi a stavy UI
+// Tento súbor by mal obsahovať VŠETKY dátové triedy pre API odpovede a stavy UI
 
 // Datová třída pro odpověď z /api/salt/
 data class SaltResponse(
@@ -22,18 +22,23 @@ data class LoginResponse(
 data class FileModel(
     val ident: String,
     val name: String,
-    val type: String?, // Typ souboru (např. "video") - může být null
-    val img: String?, // URL náhledu
+    val type: String?,
+    val img: String?,
     val stripe: String?,
     val stripe_count: Int?,
     val size: Long,
-    val queued: Int?, // Změněno na nullable
-    val positive_votes: Int?, // Změněno na nullable
-    val negative_votes: Int?, // Změněno na nullable
+    val queued: Int?,
+    val positive_votes: Int?,
+    val negative_votes: Int?,
     val password: Int,
-    // ***** PŘIDÁNO: Volitelné pole pro datum zobrazení (např. z historie) *****
-    val displayDate: String? = null
-    // *************************************************************************
+    val displayDate: String? = null,
+    // ***** PŘIDÁNO: Informace o sérii a epizodě pro CardPresenter *****
+    var seriesName: String? = null, // Název seriálu (pro zobrazení)
+    var seasonNumber: Int? = null,
+    var episodeNumber: Int? = null,
+    var episodeTitle: String? = null, // Název epizody (pokud se podaří extrahovat)
+    var videoQuality: String? = null
+    // ******************************************************************
 )
 
 // Datová třída pro celou odpověď z /api/search/ (RAW API ODPOVĚĎ)
@@ -101,6 +106,56 @@ data class HistoryResponse(
     val message: String? = null
 )
 
+// ***** PŘIDÁNY NOVÉ DATOVÉ TŘÍDY PRO SERIÁLY *****
+/**
+ * Informace extrahované z názvu souboru epizody.
+ */
+data class ParsedEpisodeInfo(
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val quality: String?,
+    val remainingName: String? // Co zbylo z názvu po odstranění S/E a kvality (potenciální název epizody)
+)
+
+/**
+ * Reprezentuje jednu epizodu seriálu.
+ * Obsahuje pôvodný FileModel a parsované informácie.
+ */
+data class SeriesEpisode(
+    val fileModel: FileModel, // Pôvodné dáta súboru z Webshare
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val quality: String?,
+    val extractedEpisodeTitle: String? // Názov epizódy extrahovaný z názvu súboru
+)
+
+/**
+ * Reprezentuje jednu sériu (sezónu) seriálu.
+ */
+data class SeriesSeason(
+    val seasonNumber: Int,
+    val episodes: MutableList<SeriesEpisode> = mutableListOf() // Zoznam epizód v tejto sérii
+) {
+    // Metóda na pridanie a zoradenie epizódy
+    fun addAndSortEpisode(episode: SeriesEpisode) {
+        episodes.add(episode)
+        episodes.sortBy { it.episodeNumber }
+    }
+}
+
+/**
+ * Reprezentuje celý seriál so všetkými jeho sériami.
+ */
+data class OrganizedSeries(
+    val title: String, // Názov seriálu zadaný používateľom
+    val seasons: MutableMap<Int, SeriesSeason> = mutableMapOf() // Mapa sérií (kľúč je číslo série)
+) {
+    fun getSortedSeasons(): List<SeriesSeason> {
+        return seasons.values.sortedBy { it.seasonNumber }
+    }
+}
+// **************************************************
+
 
 // Sealed class reprezentující RŮZNÉ STAVY PROCESU VYhledávání SOUBORŮ
 sealed class SearchState {
@@ -122,4 +177,3 @@ sealed class FileLinkState {
 
 // Objekt pro reprezentaci akce "Načíst další" v Leanback seznamech
 object LoadMoreAction
-
