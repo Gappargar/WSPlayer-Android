@@ -18,6 +18,7 @@ data class LoginResponse(
     val message: String?
 )
 
+// ***** FileModel DEFINOVANÝ SKÔR *****
 // Datová třída pro jeden nalezený soubor ve výsledcích vyhledávání (POUŽÍVANÁ V UI)
 data class FileModel(
     val ident: String,
@@ -32,14 +33,14 @@ data class FileModel(
     val negative_votes: Int?,
     val password: Int,
     val displayDate: String? = null,
-    // ***** PŘIDÁNO: Informace o sérii a epizodě pro CardPresenter *****
-    var seriesName: String? = null, // Název seriálu (pro zobrazení)
+    var seriesName: String? = null,
     var seasonNumber: Int? = null,
     var episodeNumber: Int? = null,
-    var episodeTitle: String? = null, // Název epizody (pokud se podaří extrahovat)
-    var videoQuality: String? = null
-    // ******************************************************************
+    var episodeTitle: String? = null, // Názov epizódy extrahovaný parserom
+    var videoQuality: String? = null, // Kvalita extrahovaná parserom
+    var videoLanguage: String? = null // Jazyk extrahovaný parserom
 )
+// ***********************************
 
 // Datová třída pro celou odpověď z /api/search/ (RAW API ODPOVĚĎ)
 data class SearchResponse(
@@ -106,7 +107,7 @@ data class HistoryResponse(
     val message: String? = null
 )
 
-// ***** PŘIDÁNY NOVÉ DATOVÉ TŘÍDY PRO SERIÁLY *****
+// ***** DÁTOVÉ TRIEDY PRE SERIÁLY (PO FileModel) *****
 /**
  * Informace extrahované z názvu souboru epizody.
  */
@@ -114,32 +115,77 @@ data class ParsedEpisodeInfo(
     val seasonNumber: Int,
     val episodeNumber: Int,
     val quality: String?,
-    val remainingName: String? // Co zbylo z názvu po odstranění S/E a kvality (potenciální název epizody)
+    val language: String?,
+    val remainingName: String?
 )
 
 /**
- * Reprezentuje jednu epizodu seriálu.
- * Obsahuje pôvodný FileModel a parsované informácie.
+ * Reprezentuje jednu konkrétnu verziu (súbor/kvalitu/jazyk) epizódy seriálu.
+ */
+data class SeriesEpisodeFile(
+    val fileModel: FileModel, // Teraz by mal byť FileModel rozpoznaný
+    val quality: String?,
+    val language: String?
+)
+
+/**
+ * Reprezentuje jednu logickú epizódu seriálu, ktorá môže mať viacero súborov (kvalít/jazykov).
  */
 data class SeriesEpisode(
-    val fileModel: FileModel, // Pôvodné dáta súboru z Webshare
     val seasonNumber: Int,
     val episodeNumber: Int,
-    val quality: String?,
-    val extractedEpisodeTitle: String? // Názov epizódy extrahovaný z názvu súboru
-)
+    var commonEpisodeTitle: String? = null,
+    val files: MutableList<SeriesEpisodeFile> = mutableListOf()
+) {
+    fun addFile(file: SeriesEpisodeFile) {
+        // Kontrola duplicity podľa identu FileModelu
+        if (files.none { it.fileModel.ident == file.fileModel.ident }) {
+            files.add(file)
+        }
+        // Aktualizácia spoločného názvu epizódy
+        val newEpisodeTitle = file.fileModel.episodeTitle
+        if (commonEpisodeTitle.isNullOrBlank() && !newEpisodeTitle.isNullOrBlank()){
+            commonEpisodeTitle = newEpisodeTitle
+        } else if (!newEpisodeTitle.isNullOrBlank() && (newEpisodeTitle.length > (commonEpisodeTitle?.length ?: 0))) {
+            commonEpisodeTitle = newEpisodeTitle
+        }
+    }
+}
 
 /**
  * Reprezentuje jednu sériu (sezónu) seriálu.
+ * Kľúčom v mape epizód je číslo epizódy.
  */
 data class SeriesSeason(
     val seasonNumber: Int,
-    val episodes: MutableList<SeriesEpisode> = mutableListOf() // Zoznam epizód v tejto sérii
+    val episodes: MutableMap<Int, SeriesEpisode> = mutableMapOf()
 ) {
-    // Metóda na pridanie a zoradenie epizódy
-    fun addAndSortEpisode(episode: SeriesEpisode) {
-        episodes.add(episode)
-        episodes.sortBy { it.episodeNumber }
+    fun addEpisodeFile(parsedInfo: ParsedEpisodeInfo, fileModel: FileModel, seriesQuery: String) {
+        val episode = episodes.getOrPut(parsedInfo.episodeNumber) {
+            SeriesEpisode(
+                seasonNumber = parsedInfo.seasonNumber,
+                episodeNumber = parsedInfo.episodeNumber,
+                commonEpisodeTitle = parsedInfo.remainingName
+            )
+        }
+        episode.addFile(
+            SeriesEpisodeFile(
+                fileModel = fileModel.copy( // FileModel.copy() by teraz malo fungovať
+                    seriesName = seriesQuery,
+                    seasonNumber = parsedInfo.seasonNumber,
+                    episodeNumber = parsedInfo.episodeNumber,
+                    videoQuality = parsedInfo.quality,
+                    videoLanguage = parsedInfo.language,
+                    episodeTitle = parsedInfo.remainingName
+                ),
+                quality = parsedInfo.quality,
+                language = parsedInfo.language
+            )
+        )
+    }
+
+    fun getSortedEpisodes(): List<SeriesEpisode> {
+        return episodes.values.sortedBy { it.episodeNumber }
     }
 }
 
@@ -148,7 +194,7 @@ data class SeriesSeason(
  */
 data class OrganizedSeries(
     val title: String, // Názov seriálu zadaný používateľom
-    val seasons: MutableMap<Int, SeriesSeason> = mutableMapOf() // Mapa sérií (kľúč je číslo série)
+    val seasons: MutableMap<Int, SeriesSeason> = mutableMapOf()
 ) {
     fun getSortedSeasons(): List<SeriesSeason> {
         return seasons.values.sortedBy { it.seasonNumber }
@@ -177,3 +223,4 @@ sealed class FileLinkState {
 
 // Objekt pro reprezentaci akce "Načíst další" v Leanback seznamech
 object LoadMoreAction
+
