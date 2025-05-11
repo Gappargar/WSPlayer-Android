@@ -1,25 +1,30 @@
 package com.example.wsplayer.data.models // Váš balíček - ZKONTROLUJTE
 
+import android.os.Parcelable // <-- Pridaný import
+import kotlinx.parcelize.Parcelize // <-- Pridaný import
+
 // Tento súbor by mal obsahovať VŠETKY dátové triedy pre API odpovede a stavy UI
 
 // Datová třída pro odpověď z /api/salt/
+@Parcelize
 data class SaltResponse(
     val status: String, // "OK", "FATAL"
     val salt: String?,
     val code: Int?,
     val message: String?
-)
+) : Parcelable
 
 // Datová třída pro odpověď z /api/login/
+@Parcelize
 data class LoginResponse(
     val status: String, // "OK", "ERROR", "FATAL"
     val token: String?,
     val code: Int?,
     val message: String?
-)
+) : Parcelable
 
-// ***** FileModel DEFINOVANÝ SKÔR *****
 // Datová třída pro jeden nalezený soubor ve výsledcích vyhledávání (POUŽÍVANÁ V UI)
+@Parcelize
 data class FileModel(
     val ident: String,
     val name: String,
@@ -36,13 +41,13 @@ data class FileModel(
     var seriesName: String? = null,
     var seasonNumber: Int? = null,
     var episodeNumber: Int? = null,
-    var episodeTitle: String? = null, // Názov epizódy extrahovaný parserom
-    var videoQuality: String? = null, // Kvalita extrahovaná parserom
-    var videoLanguage: String? = null // Jazyk extrahovaný parserom
-)
-// ***********************************
+    var episodeTitle: String? = null,
+    var videoQuality: String? = null,
+    var videoLanguage: String? = null
+) : Parcelable // <-- Implementuje Parcelable
 
 // Datová třída pro celou odpověď z /api/search/ (RAW API ODPOVĚĎ)
+@Parcelize
 data class SearchResponse(
     val status: String,
     val total: Int,
@@ -50,17 +55,19 @@ data class SearchResponse(
     val code: Int?,
     val message: String?,
     val appVersion: Int? = null
-)
+) : Parcelable
 
 // Datová třída pro odpověď z /api/file_link/ (RAW API ODPOVĚĎ)
+@Parcelize
 data class FileLinkResponse(
     val status: String,
     val link: String?,
     val code: Int?,
     val message: String?
-)
+) : Parcelable
 
 // Datová třída pro odpověď z /api/user_data/ (RAW API ODPOVĚĎ)
+@Parcelize
 data class UserDataResponse(
     val status: String,
     val id: String?,
@@ -84,9 +91,10 @@ data class UserDataResponse(
     val email_verified: String?,
     val code: Int?,
     val message: String?
-)
+) : Parcelable
 
 // Modely pro historii
+@Parcelize
 data class HistoryItem(
     val downloadId: String,
     val ident: String,
@@ -97,52 +105,45 @@ data class HistoryItem(
     val ipAddress: String?,
     val password: Int,
     val copyrighted: Int
-)
+) : Parcelable
 
+@Parcelize
 data class HistoryResponse(
     val status: String,
     val total: Int = 0,
     val historyItems: List<HistoryItem> = emptyList(),
     val code: Int? = null,
     val message: String? = null
-)
+) : Parcelable
 
-// ***** DÁTOVÉ TRIEDY PRE SERIÁLY (PO FileModel) *****
-/**
- * Informace extrahované z názvu souboru epizody.
- */
+// ***** DÁTOVÉ TRIEDY PRE SERIÁLY (UPRAVENÉ PRE PARCELABLE) *****
+@Parcelize
 data class ParsedEpisodeInfo(
     val seasonNumber: Int,
     val episodeNumber: Int,
     val quality: String?,
     val language: String?,
     val remainingName: String?
-)
+) : Parcelable
 
-/**
- * Reprezentuje jednu konkrétnu verziu (súbor/kvalitu/jazyk) epizódy seriálu.
- */
+@Parcelize
 data class SeriesEpisodeFile(
-    val fileModel: FileModel, // Teraz by mal byť FileModel rozpoznaný
+    val fileModel: FileModel,
     val quality: String?,
     val language: String?
-)
+) : Parcelable
 
-/**
- * Reprezentuje jednu logickú epizódu seriálu, ktorá môže mať viacero súborov (kvalít/jazykov).
- */
+@Parcelize
 data class SeriesEpisode(
     val seasonNumber: Int,
     val episodeNumber: Int,
     var commonEpisodeTitle: String? = null,
     val files: MutableList<SeriesEpisodeFile> = mutableListOf()
-) {
+) : Parcelable {
     fun addFile(file: SeriesEpisodeFile) {
-        // Kontrola duplicity podľa identu FileModelu
         if (files.none { it.fileModel.ident == file.fileModel.ident }) {
             files.add(file)
         }
-        // Aktualizácia spoločného názvu epizódy
         val newEpisodeTitle = file.fileModel.episodeTitle
         if (commonEpisodeTitle.isNullOrBlank() && !newEpisodeTitle.isNullOrBlank()){
             commonEpisodeTitle = newEpisodeTitle
@@ -152,14 +153,11 @@ data class SeriesEpisode(
     }
 }
 
-/**
- * Reprezentuje jednu sériu (sezónu) seriálu.
- * Kľúčom v mape epizód je číslo epizódy.
- */
+@Parcelize
 data class SeriesSeason(
     val seasonNumber: Int,
     val episodes: MutableMap<Int, SeriesEpisode> = mutableMapOf()
-) {
+) : Parcelable {
     fun addEpisodeFile(parsedInfo: ParsedEpisodeInfo, fileModel: FileModel, seriesQuery: String) {
         val episode = episodes.getOrPut(parsedInfo.episodeNumber) {
             SeriesEpisode(
@@ -170,7 +168,7 @@ data class SeriesSeason(
         }
         episode.addFile(
             SeriesEpisodeFile(
-                fileModel = fileModel.copy( // FileModel.copy() by teraz malo fungovať
+                fileModel = fileModel.copy(
                     seriesName = seriesQuery,
                     seasonNumber = parsedInfo.seasonNumber,
                     episodeNumber = parsedInfo.episodeNumber,
@@ -189,13 +187,11 @@ data class SeriesSeason(
     }
 }
 
-/**
- * Reprezentuje celý seriál so všetkými jeho sériami.
- */
+@Parcelize
 data class OrganizedSeries(
-    val title: String, // Názov seriálu zadaný používateľom
+    val title: String,
     val seasons: MutableMap<Int, SeriesSeason> = mutableMapOf()
-) {
+) : Parcelable {
     fun getSortedSeasons(): List<SeriesSeason> {
         return seasons.values.sortedBy { it.seasonNumber }
     }
@@ -204,6 +200,7 @@ data class OrganizedSeries(
 
 
 // Sealed class reprezentující RŮZNÉ STAVY PROCESU VYhledávání SOUBORŮ
+// Tieto sealed classy nemusia byť Parcelable, ak ich neprenášate priamo v Bundle
 sealed class SearchState {
     object Idle : SearchState()
     object Loading : SearchState()
@@ -213,7 +210,6 @@ sealed class SearchState {
     object LoadingMore : SearchState()
 }
 
-// Sealed class reprezentující RŮZNÉ STAVY PROCESU ZÍSKÁVÁNÍ ODKAZU NA SOUBOR
 sealed class FileLinkState {
     object Idle : FileLinkState()
     object LoadingLink : FileLinkState()
@@ -222,5 +218,6 @@ sealed class FileLinkState {
 }
 
 // Objekt pro reprezentaci akce "Načíst další" v Leanback seznamech
+// Nemusí byť Parcelable
 object LoadMoreAction
 

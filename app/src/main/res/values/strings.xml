@@ -29,7 +29,8 @@
 
     <string name="tv_login_action_username_title">Uživatelské jméno / Email</string>
     <string name="tv_login_action_password_title">Heslo</string>
-    <string name="tv_login_action_user_display_title">Uživatel</string> <string name="tv_login_action_continue_title">Pokračovat</string>
+    <string name="tv_login_action_user_display_title">Uživatel</string>
+    <string name="tv_login_action_continue_title">Pokračovat</string>
     <string name="tv_login_action_login_title">Přihlásit</string>
     <string name="tv_login_action_remember_me_title">Zapamatovat si mě</string>
 
@@ -47,6 +48,8 @@
     <string name="series_no_episodes_found_for">Pro serál \'%s\' se nepodařilo nalézt žádné epizody.</string>
     <string name="error_title">Chyba</string>
     <string name="search_series_prompt">Zadajte název seriálu nebo filmu.</string>
+    <string name="select_file_version_title">Vyberte verzi souboru</string>
+    <string name="select_file_version_description">Pro tuto epizodu je k dispozici více souborů. Vyberte prosím preferovanou verzi.</string>
 
     <string-array name="search_categories_array">
         <item>Všechny kategorie</item>
@@ -58,7 +61,8 @@
     </string-array>
 
     <string-array name="search_categories_api_values">
-        <item></item> <item>video</item>
+        <item></item>
+        <item>video</item>
         <item>images</item>
         <item>audio</item>
         <item>docs</item>
@@ -74,10 +78,14 @@
     </string-array>
 
     <string-array name="sort_options_api_values">
-        <item>@null</item> <item>recent</item>
+        <item>@null</item>
+        <item>recent</item>
         <item>rating</item>
         <item>largest</item>
         <item>smallest</item>
     </string-array>
+    <string name="title_activity_compose_episode_selection_dialog_fragment">
+        ComposeEpisodeSelectionDialogFragment
+    </string>
 
 </resources>
