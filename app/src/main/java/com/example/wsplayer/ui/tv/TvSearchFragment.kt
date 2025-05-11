@@ -1,4 +1,4 @@
-package com.example.wsplayer.ui.tv // Uistite sa, že balíček zodpovedá
+package com.example.wsplayer.ui.tv // Ujistěte se, že balíček odpovídá
 
 import android.app.Activity
 import android.content.Context
@@ -7,16 +7,19 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.leanback.app.SearchSupportFragment
-import androidx.leanback.widget.* // Import pre SearchBar a SearchOrbView
+import androidx.leanback.widget.* // Import pro SearchBar a SearchOrbView
 import androidx.lifecycle.ViewModelProvider
 import com.example.wsplayer.R // Váš R súbor
 import com.example.wsplayer.data.api.WebshareApiService
@@ -34,7 +37,7 @@ import com.example.wsplayer.ui.search.SearchViewModelFactory
 import com.example.wsplayer.ui.search.SeriesOrganizationState
 import com.example.wsplayer.ui.tv.presenters.CardPresenter
 import com.example.wsplayer.ui.tv.presenters.LoadMorePresenter
-// Import pre Leanback R, ak ho používate pre ID (napr. lb_search_text_editor, lb_search_bar)
+// Import pre Leanback R, ak ho používate pre ID (napr. lb_search_text_editor, lb_search_bar, lb_search_orb)
 import androidx.leanback.R as LeanbackR
 
 class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResultProvider {
@@ -77,13 +80,19 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         Log.d(TAG, "onCreate")
 
         title = getString(R.string.search_title_tv)
+
         setupResultsAdapter()
         setSearchResultProvider(this)
         setupEventListeners()
 
-        // Definitívne zakázanie hlasového vyhľadávania pre fragment
         setSpeechRecognitionCallback(null)
         Log.d(TAG, "Fragment's SpeechRecognitionCallback set to null in onCreate.")
+
+        val transparent = ContextCompat.getColor(requireContext(), android.R.color.transparent)
+        setSearchAffordanceColors(SearchOrbView.Colors(transparent, transparent, transparent))
+        Log.d(TAG, "Fragment's SearchAffordanceColors set to transparent in onCreate.")
+
+        // ODSTRANĚN BLOK setOnSearchClickedListener
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -91,35 +100,59 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         Log.d(TAG, "onViewCreated")
         observeViewModel()
 
-        // Nastavenie farieb "search orb" (ikony mikrofónu) na úplne priehľadné,
-        // čím sa efektívne skryje a deaktivuje. Voláme na fragmente.
-        val transparent = ContextCompat.getColor(requireContext(), android.R.color.transparent)
-        setSearchAffordanceColors(SearchOrbView.Colors(transparent, transparent, transparent))
-        Log.d(TAG, "Fragment's SearchAffordanceColors set to transparent.")
+        val searchBarWidget = view.findViewById<SearchBar>(LeanbackR.id.lb_search_bar)
+        if (searchBarWidget != null) {
+            searchBarWidget.setSpeechRecognitionCallback(null)
+            Log.d(TAG, "SearchBar widget's SpeechRecognitionCallback set to null.")
 
-        // Nastavenie hintu priamo na internom EditTexte
-        val searchEditText = view.findViewById<EditText>(LeanbackR.id.lb_search_text_editor)
-        if (searchEditText != null) {
-            searchEditText.hint = getString(R.string.search_hint_tv_series)
-            Log.d(TAG, "Search EditText hint set.")
+            val searchOrbView = searchBarWidget.findViewById<SearchOrbView>(LeanbackR.id.lb_search_bar_speech_orb)
+            if (searchOrbView != null) {
+                searchOrbView.visibility = View.GONE
+                searchOrbView.isFocusable = false
+                searchOrbView.isClickable = false
+                Log.d(TAG, "SearchOrbView visibility set to GONE, focusable and clickable to false.")
+            } else {
+                Log.w(TAG, "SearchOrbView (lb_search_bar_speech_orb) not found within SearchBar widget.")
+            }
         } else {
-            Log.w(TAG, "Search EditText (lb_search_text_editor) not found for hint setting.")
+            Log.e(TAG, "SearchBar widget (lb_search_bar) not found in view!")
         }
 
-        // Pokus o zobrazenie klávesnice a nastavenie fokusu na EditText
         view.post {
+            val searchEditText = view.findViewById<EditText>(LeanbackR.id.lb_search_text_editor)
             if (searchEditText != null && isAdded) {
                 searchEditText.requestFocus()
                 val imm = requireActivity().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                val success = imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
-                Log.d(TAG, "Attempted to show keyboard. Success: $success")
+                imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
+                Log.d(TAG, "Attempted to show keyboard.")
+
+                searchEditText.setOnEditorActionListener { v, actionId, event ->
+                    if (actionId == EditorInfo.IME_ACTION_SEARCH ||
+                        actionId == EditorInfo.IME_ACTION_DONE ||
+                        (event != null && event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_ENTER)) {
+                        val queryText = v.text.toString()
+                        Log.d(TAG, "Explicit OnEditorActionListener: Search action triggered. Query: $queryText")
+                        this@TvSearchFragment.onQueryTextSubmit(queryText)
+                        hideKeyboard(v)
+                        true
+                    } else {
+                        false
+                    }
+                }
             } else {
-                Log.w(TAG, "Could not request focus or show keyboard: EditText is null or fragment not added.")
+                Log.w(TAG, "Search EditText (lb_search_text_editor) not found or fragment not added for keyboard/listener.")
             }
         }
     }
 
+    private fun hideKeyboard(view: View) {
+        val imm = requireActivity().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
+    }
 
+    override fun startRecognition() {
+        Log.w(TAG, "startRecognition() called, but overridden to do nothing to completely prevent voice input.")
+    }
 
     private fun setupResultsAdapter() {
         val listRowPresenter = ListRowPresenter(FocusHighlight.ZOOM_FACTOR_MEDIUM)
@@ -321,7 +354,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
                 if (clickedSeriesEpisode != null) {
                     if (clickedSeriesEpisode.files.size > 1) {
                         Log.d(TAG, "Episode '${item.name}' has ${clickedSeriesEpisode.files.size} files. Showing selection dialog.")
-                        Toast.makeText(activity, "Výber kvality pre '${item.name}' (TODO)", Toast.LENGTH_LONG).show()
+                        Toast.makeText(activity, "Výber kvality pre '${item.episodeTitle ?: item.name}' (TODO)", Toast.LENGTH_LONG).show()
                         clickedSeriesEpisode.files.firstOrNull()?.let {
                             viewModel.getFileLinkForFile(it.fileModel)
                         }
@@ -358,8 +391,6 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         }
         return null
     }
-
-    // Odstránená metóda onActivityResult, keďže hlasové vyhľadávanie je zakázané
 
     override fun onDestroyView() {
         searchQueryRunnable?.let { handler.removeCallbacks(it) }
