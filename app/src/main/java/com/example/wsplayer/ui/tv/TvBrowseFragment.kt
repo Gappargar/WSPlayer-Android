@@ -1,4 +1,4 @@
-package com.example.wsplayer.ui.tv // Ujistěte se, že balíček odpovídá
+package com.example.wsplayer.ui.tv
 
 import android.content.Context
 import android.content.Intent
@@ -13,15 +13,16 @@ import androidx.core.content.ContextCompat
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.*
 import androidx.lifecycle.ViewModelProvider
-import com.example.wsplayer.R // Váš R soubor
+import com.example.wsplayer.R
 import com.example.wsplayer.data.api.WebshareApiService
-import com.example.wsplayer.data.models.* // Import všech modelů včetně HistoryState a HistoryItem
-import com.example.wsplayer.ui.search.SearchViewModel // Váš existující SearchViewModel
+import com.example.wsplayer.data.models.*
+import com.example.wsplayer.ui.search.SearchViewModel
 import com.example.wsplayer.ui.search.SearchViewModelFactory
-// ***** PŘIDÁN SPRÁVNÝ IMPORT PRO HistoryState *****
-import com.example.wsplayer.ui.search.HistoryState // Import sealed classy z jejího souboru
-// ***********************************************
-import com.example.wsplayer.ui.tv.presenters.CardPresenter // Váš nový CardPresenter
+import com.example.wsplayer.ui.search.HistoryState // Ujistěte se, že tento import je správný
+// ***** PŘIDÁN/OVĚŘEN SPRÁVNÝ IMPORT PRO CustomTvSearchActivity *****
+import com.example.wsplayer.ui.tv.CustomTvSearchActivity // Import pro vaši vlastní vyhledávací aktivitu
+// *****************************************************************
+import com.example.wsplayer.ui.tv.presenters.CardPresenter
 
 class TvBrowseFragment : BrowseSupportFragment() {
 
@@ -56,7 +57,6 @@ class TvBrowseFragment : BrowseSupportFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
-
         setupUIElements()
         setupEventListeners()
     }
@@ -65,7 +65,6 @@ class TvBrowseFragment : BrowseSupportFragment() {
         super.onViewCreated(view, savedInstanceState)
         Log.d(TAG, "onViewCreated")
         observeViewModel()
-
         viewModel.isUserLoggedIn.observe(viewLifecycleOwner) { isLoggedIn ->
             if (isLoggedIn == true) {
                 if (viewModel.historyState.value is HistoryState.Idle || viewModel.historyState.value == null) {
@@ -80,31 +79,27 @@ class TvBrowseFragment : BrowseSupportFragment() {
         }
     }
 
-
     private fun setupUIElements() {
         title = getString(R.string.app_name_tv)
         badgeDrawable = ContextCompat.getDrawable(requireActivity(), R.mipmap.ic_launcher_tv)
-
         headersState = HEADERS_ENABLED
         isHeadersTransitionOnBackEnabled = true
-
         val listRowPresenter = ListRowPresenter(FocusHighlight.ZOOM_FACTOR_MEDIUM)
         listRowPresenter.shadowEnabled = true
         listRowPresenter.selectEffectEnabled = true
-
         rowsAdapter = ArrayObjectAdapter(listRowPresenter)
         adapter = rowsAdapter
 
         setOnSearchClickedListener {
-            Log.d(TAG, "Search icon clicked, starting TvSearchActivity")
-            val intent = Intent(activity, TvSearchActivity::class.java)
+            Log.d(TAG, "Search icon clicked, starting CustomTvSearchActivity")
+            // ***** ZDE JE POTŘEBA SPRÁVNĚ VOLAT CustomTvSearchActivity *****
+            val intent = Intent(activity, CustomTvSearchActivity::class.java)
             startActivity(intent)
         }
     }
 
     private fun observeViewModel() {
         Log.d(TAG, "Setting up observers for ViewModel.")
-
         viewModel.historyState.observe(viewLifecycleOwner) { state ->
             Log.d(TAG, "HistoryState changed: $state")
             when (state) {
@@ -205,20 +200,12 @@ class TvBrowseFragment : BrowseSupportFragment() {
 
         historyItems.forEach { historyItem ->
             val fileModel = FileModel(
-                ident = historyItem.ident,
-                name = historyItem.name,
-                type = historyItem.name.substringAfterLast('.', "?"), // Výchozí '?' pokud typ nelze odvodit
-                img = null, // Historie nemá obrázek
-                stripe = null,
-                stripe_count = null,
-                size = historyItem.size,
-                queued = 0,
-                positive_votes = 0,
-                negative_votes = 0,
+                ident = historyItem.ident, name = historyItem.name,
+                type = historyItem.name.substringAfterLast('.', "?"),
+                img = null, stripe = null, stripe_count = null, size = historyItem.size,
+                queued = 0, positive_votes = 0, negative_votes = 0,
                 password = historyItem.password,
-                // ***** PŘIDÁNO: Nastavení displayDate *****
-                displayDate = historyItem.startedAt ?: historyItem.endedAt // Použijeme startedAt, nebo endedAt jako fallback
-                // ***************************************
+                displayDate = historyItem.startedAt ?: historyItem.endedAt
             )
             historyListRowAdapter?.add(fileModel)
         }
@@ -227,7 +214,7 @@ class TvBrowseFragment : BrowseSupportFragment() {
         rowsAdapter.add(ListRow(header, historyListRowAdapter))
         Log.d(TAG, "Displayed ${historyItems.size} history items.")
         if (historyItems.isNotEmpty() && rowsAdapter.size() > 0) {
-            // Spolehneme se na onItemViewSelectedListener pro aktualizaci detailů
+            // Spoliehame sa na onItemViewSelectedListener
         } else {
             fileSelectedListener?.onFileSelectedInBrowse(null)
         }
@@ -254,18 +241,19 @@ class TvBrowseFragment : BrowseSupportFragment() {
         }
     }
 
+    // Presenter pro zobrazení textové zprávy
     class SingleTextViewPresenter : Presenter() {
-        override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
+        override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
             val textView = TextView(parent.context).apply {
                 isFocusable = false
                 setPadding(32, 16, 32, 16)
                 textSize = 18f
             }
-            return Presenter.ViewHolder(textView)
+            return ViewHolder(textView)
         }
-        override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
+        override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
             (viewHolder.view as? TextView)?.text = item as? String ?: ""
         }
-        override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder?) {}
+        override fun onUnbindViewHolder(viewHolder: ViewHolder) {}
     }
 }

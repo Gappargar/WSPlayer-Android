@@ -1,4 +1,4 @@
-package com.example.wsplayer.ui.tv // Uistite sa, že balíček zodpovedá
+package com.example.wsplayer.ui.tv
 
 import android.app.Activity
 import android.content.Context
@@ -7,44 +7,47 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.leanback.app.SearchSupportFragment
-import androidx.leanback.widget.* // Import pre SearchBar a SearchOrbView
+import androidx.leanback.app.SearchSupportFragment // Zůstáváme u SearchSupportFragment prozatím
+import androidx.leanback.widget.*
 import androidx.lifecycle.ViewModelProvider
-import com.example.wsplayer.R // Váš R súbor
+import com.example.wsplayer.R
 import com.example.wsplayer.data.api.WebshareApiService
 import com.example.wsplayer.data.models.FileLinkState
 import com.example.wsplayer.data.models.FileModel
 import com.example.wsplayer.data.models.LoadMoreAction
-// Explicitné importy pre dátové modely seriálov
 import com.example.wsplayer.data.models.OrganizedSeries
-import com.example.wsplayer.data.models.SeriesSeason
 import com.example.wsplayer.data.models.SeriesEpisode
-import com.example.wsplayer.data.models.SeriesEpisodeFile
+// import com.example.wsplayer.data.models.SeriesEpisodeFile // Není přímo potřeba v tomto souboru
 import com.example.wsplayer.ui.search.SearchViewModel
 import com.example.wsplayer.ui.search.SearchViewModelFactory
-// Import pre SeriesOrganizationState z SearchViewModel
 import com.example.wsplayer.ui.search.SeriesOrganizationState
+// Import pro náš nový Compose dialog
+import com.example.wsplayer.ui.tv.compose.ComposeEpisodeSelectionDialogFragment
 import com.example.wsplayer.ui.tv.presenters.CardPresenter
 import com.example.wsplayer.ui.tv.presenters.LoadMorePresenter
-// Import pre Leanback R, ak ho používate pre ID (napr. lb_search_text_editor, lb_search_bar)
 import androidx.leanback.R as LeanbackR
 
-class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResultProvider {
+class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResultProvider,
+    ComposeEpisodeSelectionDialogFragment.OnEpisodeFileSelectedListener { // ***** IMPLEMENTACE NOVÉHO LISTENERU *****
 
     private val TAG = "TvSearchFragment"
 
+    // Listener pro komunikaci s aktivitou ohledně detailů vybraného souboru
     interface OnFileSelectedInSearchListener {
         fun onFileSelectedInSearch(file: FileModel?)
     }
-    private var fileSelectedListener: OnFileSelectedInSearchListener? = null
+    private var activityFileSelectedListener: OnFileSelectedInSearchListener? = null
 
     private lateinit var rowsAdapter: ArrayObjectAdapter
     private val viewModel: SearchViewModel by lazy {
@@ -65,7 +68,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
     override fun onAttach(context: Context) {
         super.onAttach(context)
         if (context is OnFileSelectedInSearchListener) {
-            fileSelectedListener = context
+            activityFileSelectedListener = context
             Log.d(TAG, "OnFileSelectedInSearchListener attached to activity.")
         } else {
             Log.e(TAG, "$context must implement OnFileSelectedInSearchListener for detail view to work.")
@@ -77,11 +80,11 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         Log.d(TAG, "onCreate")
 
         title = getString(R.string.search_title_tv)
+
         setupResultsAdapter()
         setSearchResultProvider(this)
         setupEventListeners()
 
-        // Definitívne zakázanie hlasového vyhľadávania pre fragment
         setSpeechRecognitionCallback(null)
         Log.d(TAG, "Fragment's SpeechRecognitionCallback set to null in onCreate.")
     }
@@ -91,35 +94,61 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         Log.d(TAG, "onViewCreated")
         observeViewModel()
 
-        // Nastavenie farieb "search orb" (ikony mikrofónu) na úplne priehľadné,
-        // čím sa efektívne skryje a deaktivuje. Voláme na fragmente.
-        val transparent = ContextCompat.getColor(requireContext(), android.R.color.transparent)
-        setSearchAffordanceColors(SearchOrbView.Colors(transparent, transparent, transparent))
-        Log.d(TAG, "Fragment's SearchAffordanceColors set to transparent.")
-
-        // Nastavenie hintu priamo na internom EditTexte
-        val searchEditText = view.findViewById<EditText>(LeanbackR.id.lb_search_text_editor)
-        if (searchEditText != null) {
-            searchEditText.hint = getString(R.string.search_hint_tv_series)
+        val searchBarWidget = view.findViewById<SearchBar>(LeanbackR.id.lb_search_bar)
+        if (searchBarWidget != null) {
+            val searchEditText = searchBarWidget.findViewById<EditText>(LeanbackR.id.lb_search_text_editor)
+            searchEditText?.hint = getString(R.string.search_hint_tv_series)
             Log.d(TAG, "Search EditText hint set.")
+
+            searchBarWidget.setSpeechRecognitionCallback(null)
+            Log.d(TAG, "SearchBar widget's SpeechRecognitionCallback set to null.")
+
+            val searchOrbView = searchBarWidget.findViewById<SearchOrbView>(LeanbackR.id.lb_search_bar_speech_orb)
+            searchOrbView?.visibility = View.GONE
+            searchOrbView?.isFocusable = false
+            searchOrbView?.isClickable = false
+            Log.d(TAG, "SearchOrbView visibility set to GONE, focusable and clickable to false.")
         } else {
-            Log.w(TAG, "Search EditText (lb_search_text_editor) not found for hint setting.")
+            Log.e(TAG, "SearchBar widget (lb_search_bar) not found in view!")
+            val transparent = ContextCompat.getColor(requireContext(), android.R.color.transparent)
+            setSearchAffordanceColors(SearchOrbView.Colors(transparent, transparent, transparent))
         }
 
-        // Pokus o zobrazenie klávesnice a nastavenie fokusu na EditText
         view.post {
+            val searchEditText = view.findViewById<EditText>(LeanbackR.id.lb_search_text_editor)
             if (searchEditText != null && isAdded) {
                 searchEditText.requestFocus()
                 val imm = requireActivity().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                val success = imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
-                Log.d(TAG, "Attempted to show keyboard. Success: $success")
+                imm.showSoftInput(searchEditText, InputMethodManager.SHOW_IMPLICIT)
+                Log.d(TAG, "Attempted to show keyboard.")
+
+                searchEditText.setOnEditorActionListener { v, actionId, event ->
+                    if (actionId == EditorInfo.IME_ACTION_SEARCH ||
+                        actionId == EditorInfo.IME_ACTION_DONE ||
+                        (event != null && event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_ENTER)) {
+                        val queryText = v.text.toString()
+                        Log.d(TAG, "Explicit OnEditorActionListener: Search action triggered. Query: $queryText")
+                        this@TvSearchFragment.onQueryTextSubmit(queryText)
+                        hideKeyboard(v)
+                        true
+                    } else {
+                        false
+                    }
+                }
             } else {
-                Log.w(TAG, "Could not request focus or show keyboard: EditText is null or fragment not added.")
+                Log.w(TAG, "Search EditText (lb_search_text_editor) not found or fragment not added for keyboard/listener.")
             }
         }
     }
 
+    private fun hideKeyboard(view: View) {
+        val imm = requireActivity().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
+    }
 
+    override fun startRecognition() {
+        Log.w(TAG, "startRecognition() called, but overridden to do nothing to completely prevent voice input.")
+    }
 
     private fun setupResultsAdapter() {
         val listRowPresenter = ListRowPresenter(FocusHighlight.ZOOM_FACTOR_MEDIUM)
@@ -138,12 +167,12 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
                     rowsAdapter.clear()
                     currentOrganizedSeries = null
                     currentOtherVideos = null
-                    val header = HeaderItem(0, "Spracovávam...")
+                    val header = HeaderItem(0, "Zpracovávám...")
                     val messagePresenter = TvBrowseFragment.SingleTextViewPresenter()
                     val messageAdapter = ArrayObjectAdapter(messagePresenter)
-                    messageAdapter.add("Vyhľadávam a organizujem epizódy, prosím čakajte...")
+                    messageAdapter.add("Vyhledávám a organizuji epizody, prosím čekejte...")
                     rowsAdapter.add(ListRow(header, messageAdapter))
-                    fileSelectedListener?.onFileSelectedInSearch(null)
+                    activityFileSelectedListener?.onFileSelectedInSearch(null)
                 }
                 is SeriesOrganizationState.Success -> {
                     Log.d(TAG, "SeriesOrganizationState: Success - Organized series: ${state.series.title}, Other videos: ${state.otherVideos.size}")
@@ -156,14 +185,14 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
                     currentOrganizedSeries = null
                     currentOtherVideos = null
                     displayErrorMessage(state.message)
-                    fileSelectedListener?.onFileSelectedInSearch(null)
+                    activityFileSelectedListener?.onFileSelectedInSearch(null)
                 }
                 is SeriesOrganizationState.Idle -> {
                     Log.d(TAG, "SeriesOrganizationState: Idle")
                     currentOrganizedSeries = null
                     currentOtherVideos = null
                     displayInitialSearchMessage()
-                    fileSelectedListener?.onFileSelectedInSearch(null)
+                    activityFileSelectedListener?.onFileSelectedInSearch(null)
                 }
             }
         }
@@ -250,7 +279,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
                         }
                     }
                     if (listRowAdapter.size() > 0) {
-                        val header = HeaderItem(headerIdCounter++, "Séria ${season.seasonNumber} (${series.title})")
+                        val header = HeaderItem(headerIdCounter++, "Série ${season.seasonNumber} (${series.title})")
                         rowsAdapter.add(ListRow(header, listRowAdapter))
                         hasContentDisplayed = true
                     }
@@ -259,7 +288,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         }
 
         if (otherVideos.isNotEmpty()) {
-            val moviesHeader = HeaderItem(headerIdCounter++, "Filmy a iné videá")
+            val moviesHeader = HeaderItem(headerIdCounter++, "Filmy a jiné video")
             val moviesListAdapter = ArrayObjectAdapter(cardPresenter)
             otherVideos.forEach { fileModel ->
                 moviesListAdapter.add(fileModel)
@@ -271,7 +300,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         if (!hasContentDisplayed) {
             displayErrorMessage(getString(R.string.series_no_episodes_found_for, series.title))
         } else {
-            fileSelectedListener?.onFileSelectedInSearch(null)
+            activityFileSelectedListener?.onFileSelectedInSearch(null)
         }
     }
 
@@ -281,7 +310,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         if (newQuery.isNullOrEmpty()) {
             rowsAdapter.clear()
             displayInitialSearchMessage()
-            fileSelectedListener?.onFileSelectedInSearch(null)
+            activityFileSelectedListener?.onFileSelectedInSearch(null)
         }
         return true
     }
@@ -294,7 +323,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         } else {
             rowsAdapter.clear()
             displayInitialSearchMessage()
-            fileSelectedListener?.onFileSelectedInSearch(null)
+            activityFileSelectedListener?.onFileSelectedInSearch(null)
         }
         return true
     }
@@ -303,7 +332,7 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         Log.d(TAG, "Performing series search and organization for: $query")
         currentOrganizedSeries = null
         currentOtherVideos = null
-        fileSelectedListener?.onFileSelectedInSearch(null)
+        activityFileSelectedListener?.onFileSelectedInSearch(null)
         viewModel.searchAndOrganizeSeries(query)
     }
 
@@ -316,23 +345,31 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
     private fun setupEventListeners() {
         setOnItemViewClickedListener { itemViewHolder, item, rowViewHolder, row ->
             if (item is FileModel) {
-                Log.d(TAG, "Episode or Movie clicked: ${item.name}")
+                Log.d(TAG, "Item clicked: ${item.name} (ident: ${item.ident})")
+
                 val clickedSeriesEpisode = findSeriesEpisodeForFileModel(item)
+
                 if (clickedSeriesEpisode != null) {
+                    // Je to epizoda seriálu
                     if (clickedSeriesEpisode.files.size > 1) {
-                        Log.d(TAG, "Episode '${item.name}' has ${clickedSeriesEpisode.files.size} files. Showing selection dialog.")
-                        Toast.makeText(activity, "Výber kvality pre '${item.name}' (TODO)", Toast.LENGTH_LONG).show()
-                        clickedSeriesEpisode.files.firstOrNull()?.let {
-                            viewModel.getFileLinkForFile(it.fileModel)
-                        }
+                        Log.d(TAG, "Episode '${item.episodeTitle ?: item.name}' (S${clickedSeriesEpisode.seasonNumber}E${clickedSeriesEpisode.episodeNumber}) has ${clickedSeriesEpisode.files.size} files.")
+                        // ***** ZOBRAZENÍ COMPOSE DIALOGU *****
+                        val dialog = ComposeEpisodeSelectionDialogFragment.newInstance(
+                            clickedSeriesEpisode.files, // Seznam SeriesEpisodeFile
+                            "S${clickedSeriesEpisode.seasonNumber}E${clickedSeriesEpisode.episodeNumber}: ${clickedSeriesEpisode.commonEpisodeTitle ?: item.name}"
+                        )
+                        dialog.setTargetFragment(this@TvSearchFragment, 0) // Nastavení tohoto fragmentu jako cíle pro callback
+                        parentFragmentManager.let { dialog.show(it, "ComposeEpisodeFileSelectionDialog") }
+                        // ***********************************
                     } else if (clickedSeriesEpisode.files.isNotEmpty()) {
                         Log.d(TAG, "Episode '${item.name}' has 1 file. Playing directly.")
                         viewModel.getFileLinkForFile(clickedSeriesEpisode.files.first().fileModel)
                     } else {
                         Log.w(TAG, "Episode '${item.name}' has no files associated.")
-                        Toast.makeText(activity, "Pre túto epizódu neboli nájdené žiadne súbory.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(activity, "Pro tuto epizodu nebyly nalezeny žádné soubory.", Toast.LENGTH_SHORT).show()
                     }
                 } else {
+                    // Je to pravděpodobně film (z otherVideos)
                     Log.d(TAG, "Clicked on a movie/other video: ${item.name}")
                     viewModel.getFileLinkForFile(item)
                 }
@@ -341,25 +378,29 @@ class TvSearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         setOnItemViewSelectedListener { itemViewHolder, item, rowViewHolder, row ->
             if (item is FileModel) {
                 Log.d(TAG,"Selected FileModel in Search: ${item.name}")
-                fileSelectedListener?.onFileSelectedInSearch(item)
+                activityFileSelectedListener?.onFileSelectedInSearch(item)
             } else {
-                fileSelectedListener?.onFileSelectedInSearch(null)
+                activityFileSelectedListener?.onFileSelectedInSearch(null)
             }
         }
     }
 
     private fun findSeriesEpisodeForFileModel(clickedFileModel: FileModel): SeriesEpisode? {
-        currentOrganizedSeries?.seasons?.values?.forEach { season ->
-            season.episodes.values.forEach { episode ->
-                if (episode.files.any { it.fileModel.ident == clickedFileModel.ident }) {
-                    return episode
-                }
-            }
+        val seasonNum = clickedFileModel.seasonNumber
+        val episodeNum = clickedFileModel.episodeNumber
+
+        if (seasonNum != null && episodeNum != null) {
+            return currentOrganizedSeries?.seasons?.get(seasonNum)?.episodes?.get(episodeNum)
         }
         return null
     }
 
-    // Odstránená metóda onActivityResult, keďže hlasové vyhľadávanie je zakázané
+    // ***** IMPLEMENTACE OnEpisodeFileSelectedListener z Compose DIALOGU *****
+    override fun onEpisodeFileSelected(selectedFileModel: FileModel) {
+        Log.d(TAG, "File selected from Compose dialog: ${selectedFileModel.name}")
+        viewModel.getFileLinkForFile(selectedFileModel)
+    }
+    // *******************************************************************
 
     override fun onDestroyView() {
         searchQueryRunnable?.let { handler.removeCallbacks(it) }

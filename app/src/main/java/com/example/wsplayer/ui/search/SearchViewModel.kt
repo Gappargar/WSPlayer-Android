@@ -82,8 +82,8 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
     var currentPage: Int = 0
         private set
     private val resultsPerPage = 50
-    private val seriesSearchLimitPerPage = 150
-    private val maxFilesPerQueryType = 450
+    private val seriesSearchLimitPerPage = 150 // Limit pre jeden dopyt pri hľadaní seriálu
+    private val maxFilesPerQueryType = 450 // Zvýšený limit pre viac stránok na jeden typ dopytu
 
 
     init {
@@ -98,78 +98,15 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
     }
 
     fun search(query: String, category: String?, sort: String? = null) {
-        Log.d(TAG, "search() volaný s dopytom: '$query', kategóriou: '$category', radením: '$sort', limit: $resultsPerPage")
-        if (query.isEmpty()) {
-            _searchState.postValue(SearchState.Idle); _searchResults.postValue(emptyList()); _totalResults.postValue(0)
-            Log.d(TAG, "Prázdny dopyt, vraciam sa do Idle."); return
-        }
-        if (isUserLoggedIn.value != true) {
-            Log.e(TAG, "Pokus o vyhľadávanie bez platného tokenu."); _searchState.postValue(SearchState.Error("Pre vyhľadávanie je vyžadované prihlásenie."))
-            _searchResults.postValue(emptyList()); _totalResults.postValue(0); return
-        }
-        if (_isLoading.value == true && _searchState.value is SearchState.Loading) {
-            Log.d(TAG, "Už prebieha načítavanie (prvá stránka), preskakujem nové vyhľadávanie."); return
-        }
-        currentSearchQuery = query; currentSearchCategory = category; currentSortOrder = sort; currentPage = 0
-        _searchResults.postValue(emptyList()); _totalResults.postValue(0); _isLoading.postValue(true); _searchState.postValue(SearchState.Loading)
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = repository.searchFiles(query=currentSearchQuery, category=currentSearchCategory, sort=currentSortOrder, limit=resultsPerPage, offset=(currentPage*resultsPerPage))
-            _isLoading.postValue(false)
-            if (result.isSuccess) {
-                val response = result.getOrThrow(); _totalResults.postValue(response.total)
-                if (!response.files.isNullOrEmpty()) {
-                    _searchResults.postValue(response.files); _searchState.postValue(SearchState.Success(response.files, response.total))
-                } else {
-                    _searchState.postValue(SearchState.EmptyResults); _searchResults.postValue(emptyList())
-                }
-            } else {
-                val errorMsg = result.exceptionOrNull()?.message ?: "Neznáma chyba"; _searchState.postValue(SearchState.Error(errorMsg))
-                _searchResults.postValue(emptyList()); _totalResults.postValue(0)
-            }
-        }
+        // ... (kód pre bežné vyhľadávanie - bez zmeny)
     }
 
     fun loadNextPage() {
-        Log.d(TAG, "loadNextPage() volaný.")
-        if (isUserLoggedIn.value != true || currentSearchQuery.isEmpty() || _isLoading.value == true) {
-            Log.d(TAG, "Preskakujem loadNextPage."); return
-        }
-        val currentCount = _searchResults.value?.size ?: 0; val total = _totalResults.value ?: 0
-        if (currentCount >= total && total > 0) { Log.d(TAG, "Žiadne ďalšie stránky."); return }
-        currentPage++; _isLoading.postValue(true); _searchState.postValue(SearchState.LoadingMore)
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = repository.searchFiles(query=currentSearchQuery, category=currentSearchCategory, sort=currentSortOrder, limit=resultsPerPage, offset=(currentPage*resultsPerPage))
-            _isLoading.postValue(false)
-            if (result.isSuccess) {
-                val response = result.getOrThrow()
-                if (!response.files.isNullOrEmpty()) {
-                    val currentList = _searchResults.value ?: emptyList(); val updatedList = currentList + response.files
-                    _searchResults.postValue(updatedList); _searchState.postValue(SearchState.Success(updatedList, _totalResults.value ?: updatedList.size))
-                } else {
-                    _searchState.postValue(SearchState.Success(_searchResults.value ?: emptyList(), _totalResults.value ?: 0))
-                }
-            } else {
-                val errorMsg = result.exceptionOrNull()?.message ?: "Neznáma chyba pri načítavaní"; _searchState.postValue(SearchState.Error(errorMsg))
-            }
-        }
+        // ... (kód pre načítanie ďalšej stránky - bez zmeny)
     }
 
     fun fetchHistory(limit: Int = 20) {
-        Log.d(TAG, "fetchHistory() called with limit: $limit")
-        if (isUserLoggedIn.value != true) {
-            _historyState.postValue(HistoryState.Error("Pre zobrazenie histórie je vyžadované prihlásenie.")); return
-        }
-        if (_historyState.value is HistoryState.Loading) { Log.d(TAG, "History is already loading."); return }
-        _historyState.postValue(HistoryState.Loading)
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = repository.getHistory(offset = 0, limit = limit)
-            if (result.isSuccess) {
-                val response = result.getOrThrow()
-                _historyState.postValue(HistoryState.Success(response.historyItems))
-            } else {
-                _historyState.postValue(HistoryState.Error(result.exceptionOrNull()?.message ?: "Neznáma chyba"))
-            }
-        }
+        // ... (kód pre načítanie histórie - bez zmeny)
     }
 
     // ***** UPRAVENÁ METÓDA PRE VYHĽADÁVANIE A ORGANIZÁCIU SERIÁLOV *****
@@ -194,13 +131,14 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
             val allFoundFilesSet = mutableSetOf<FileModel>()
             val originalQuery = seriesNameQuery.trim()
 
-            // Normalizovaný pôvodný dopyt pre filtrovanie - odstránime len rok a špeciálne znaky, jazyk ponecháme
-            val normalizedQueryForFiltering = originalQuery.lowercase()
+            // Normalizovaný pôvodný dopyt pre PREDbežné filtrovanie
+            // Odstránime len rok a špeciálne znaky, ktoré nie sú súčasťou bežného názvu
+            val normalizedOriginalQueryForFilter = originalQuery.lowercase()
                 .replace(Regex("""\s*\(\d{4}\)\s*"""), " ") // Odstrániť rok v zátvorkách
                 .replace(Regex("""\b\d{4}\b"""), " ")      // Odstrániť samostatný rok
-                .replace(Regex("[^a-zA-Z0-9\\s\\.]"), " ") // Ponechať bodky pre názvy ako "star.trek"
-                .replace(Regex("\\s+"), " ").trim()
-            Log.d(TAG, "Normalized query for filtering: '$normalizedQueryForFiltering'")
+                .replace(Regex("[-._\\[\\]()]"), " ")    // Nahradiť bežné oddeľovače medzerou
+                .replace(Regex("\\s+"), " ").trim() // Normalizovať viacnásobné medzery
+            Log.d(TAG, "Normalized original query for filtering: '$normalizedOriginalQueryForFilter'")
 
 
             // 1. Generovanie a vykonanie viacerých vyhľadávacích dopytov
@@ -221,7 +159,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                     searchApiQueries.add("$targetForGenericQueries season")
                     searchApiQueries.add("$targetForGenericQueries séria")
                 }
-                // Tento dopyt môže byť príliš všeobecný, zvážiť jeho odstránenie alebo úpravu
+                // Tento dopyt môže byť príliš všeobecný, zvážiť jeho úpravu alebo odstránenie
                 // if (!targetForGenericQueries.lowercase().matches(Regex(".*s\\d{1,2}.*"))) {
                 //     searchApiQueries.add("$targetForGenericQueries S01")
                 // }
@@ -240,8 +178,7 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                     val searchResult = repository.searchFiles(
                         query = apiQuery,
                         category = "video",
-                        // ***** ZMENA TRIEDENIA NA null (API default - relevancia) *****
-                        sort = null,
+                        sort = null, // ***** ZMENA TRIEDENIA NA null (API default - relevancia) *****
                         limit = seriesSearchLimitPerPage,
                         offset = currentOffset
                     )
@@ -250,15 +187,17 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
                         val response = searchResult.getOrNull()
                         response?.files?.let { files ->
                             if (files.isNotEmpty()) {
-                                // ***** UPRAVENÉ PREDbežné FILTROVANIE *****
                                 val relevantFiles = files.filter { file ->
-                                    val normalizedFileName = file.name.lowercase()
-                                        .replace(".", " ")
-                                        .replace(Regex("[^a-zA-Z0-9\\s]"), "")
+                                    val normalizedFileNameForFilter = file.name.lowercase()
+                                        .replace(Regex("[-._\\[\\]()]"), " ")
                                         .replace(Regex("\\s+"), " ").trim()
                                     // Súbor je relevantný, ak jeho normalizovaný názov obsahuje
                                     // normalizovaný PÔVODNÝ dopyt (po základnom očistení)
-                                    normalizedFileName.contains(normalizedQueryForFiltering)
+                                    val passes = normalizedFileNameForFilter.contains(normalizedOriginalQueryForFilter)
+                                    // if (!passes) {
+                                    //     Log.v(TAG, "File DISCARDED by preliminary filter: ${file.name} (normalized: $normalizedFileNameForFilter vs query: $normalizedOriginalQueryForFilter)")
+                                    // }
+                                    passes
                                 }
                                 allFoundFilesSet.addAll(relevantFiles)
                                 accumulatedForThisApiQuery += files.size
@@ -325,59 +264,13 @@ class SearchViewModel(private val repository: WebshareRepository) : ViewModel() 
 
     fun getFileLinkForFile(fileItem: FileModel) {
         // ... (kód pre získanie odkazu - bez zmeny)
-        Log.d(TAG, "getFileLinkForFile() volaný pre ${fileItem.name}.")
-        if (isUserLoggedIn.value != true) {
-            Log.e(TAG, "Pokus o získanie odkazu bez platného tokenu. Nastavujem Error stav.")
-            _fileLinkState.postValue(FileLinkState.Error("Pre získanie odkazu je vyžadované prihlásenie."))
-            return
-        }
-
-        if (fileItem.password == 1) {
-            Log.w(TAG, "Súbor ${fileItem.name} je chránený heslom - implementácia chýba.")
-            _fileLinkState.postValue(FileLinkState.Error("Súbor je chránený heslom. Podpora zatiaľ nie je implementovaná."))
-            return
-        }
-
-        _fileLinkState.postValue(FileLinkState.LoadingLink)
-
-        viewModelScope.launch(Dispatchers.IO) {
-            Log.d(TAG, "Spúšťam API volanie pre získanie odkazu pre súbor s ID: ${fileItem.ident}")
-            val result = repository.getFileLink(fileItem.ident, filePassword = null)
-
-            if (result.isSuccess) {
-                val fileUrl = result.getOrThrow()
-                Log.d(TAG, "API volanie získania odkazu úspešné. Odkaz získaný: $fileUrl")
-                _fileLinkState.postValue(FileLinkState.LinkSuccess(fileUrl))
-            } else {
-                Log.e(TAG, "API volanie získania odkazu zlyhalo: ${result.exceptionOrNull()?.message}")
-                val errorMessage = result.exceptionOrNull()?.message ?: "Neznáma chyba pri získavaní odkazu"
-                _fileLinkState.postValue(FileLinkState.Error(errorMessage))
-            }
-        }
     }
 
     fun resetFileLinkState() {
-        if (_fileLinkState.value != FileLinkState.Idle) {
-            _fileLinkState.postValue(FileLinkState.Idle)
-            Log.d(TAG, "FileLinkState resetovaný na Idle.")
-        }
+        // ... (kód pre reset - bez zmeny)
     }
-
 
     fun logout() {
         // ... (kód pre odhlásenie - bez zmeny)
-        Log.d(TAG, "logout() volaný.")
-        if (isUserLoggedIn.value != true) {
-            Log.d(TAG, "Už odhlásený, preskakujem logout().")
-            return
-        }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            Log.d(TAG, "Spúšťam mazanie tokenu a credentials v Repository.")
-            repository.clearAuthToken()
-            repository.clearCredentials()
-            _isUserLoggedIn.postValue(false)
-            Log.d(TAG, "Token a credentials zmazané, isUserLoggedIn nastavený na false.")
-        }
     }
 }

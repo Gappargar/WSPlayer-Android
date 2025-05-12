@@ -7,6 +7,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="tv_background_color">#212121</color>
+    <color name="tv_brand_primary">#303F9F</color>
+    <color name="tv_brand_primary_dark">#1A237E</color>
+    <color name="tv_accent">#FF4081</color>
     <color name="tv_card_default_info_background">#E6333333</color>
     <color name="tv_card_selected_info_background">#E60073E6</color>
-    </resources>
+    <color name="lb_tv_white">#F1F1F1</color>
+    <color name="tv_row_header_description_color">#A0A0A0</color>
+</resources>

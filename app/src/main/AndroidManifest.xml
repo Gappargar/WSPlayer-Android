@@ -5,7 +5,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
@@ -16,10 +15,10 @@
         android:name="android.hardware.microphone"
         android:required="false" />
 
-
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -27,7 +26,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.WSPlayer"
-        android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
 
         <activity
@@ -43,34 +41,38 @@
 
         <activity
             android:name=".ui.tv.TvMainActivity"
-            android:exported="true"
-            android:label="@string/app_name_tv"
-            android:icon="@mipmap/ic_launcher_tv"
             android:banner="@drawable/app_banner_tv"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_tv"
+            android:label="@string/app_name_tv"
             android:logo="@mipmap/ic_launcher_tv"
-            android:theme="@style/Theme.Leanback"> <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-        </intent-filter>
+            android:theme="@style/Theme.WSPlayer.Leanback">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
         </activity>
 
         <activity
-            android:name=".ui.tv.TvSearchActivity"
+            android:name=".ui.tv.CustomTvSearchActivity"
             android:exported="false"
-            android:theme="@style/Theme.Leanback" />
-
+            android:theme="@style/Theme.WSPlayer" />
         <activity
-            android:name=".ui.tv.CustomTvLoginActivity" android:exported="false"
-            android:theme="@style/Theme.WSPlayer" /> <activity
-        android:name=".ui.search.SearchActivity"
-        android:exported="false" />
+            android:name=".ui.tv.CustomTvLoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WSPlayer" />
+        <activity
+            android:name=".ui.search.SearchActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WSPlayer"/>
         <activity
             android:name=".ui.settings.SettingsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.WSPlayer"/>
         <activity
             android:name=".ui.player.PlayerActivity"
-            android:exported="false" />
-
+            android:exported="false"
+            android:theme="@style/Theme.WSPlayer.Leanback" />
     </application>
 
 </manifest>
