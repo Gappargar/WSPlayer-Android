@@ -24,24 +24,24 @@ data class LoginResponse(
 // Datová třída pro jeden nalezený soubor ve výsledcích vyhledávání (POUŽÍVANÁ V UI)
 @Parcelize
 data class FileModel(
-    val ident: String,
-    val name: String,
-    val type: String?, // Typ souboru (např. "video") - může být null
-    val img: String?, // URL náhledu
-    val stripe: String?,
-    val stripe_count: Int?,
-    val size: Long,
-    val queued: Int?, // Počet ve frontě - může být null
-    val positive_votes: Int?, // Kladné hlasy - může být null
-    val negative_votes: Int?, // Záporné hlasy - může být null
-    val password: Int, // 0=Ne, 1=Ano
-    val displayDate: String? = null, // Pro zobrazení data z historie
-    var seriesName: String? = null, // Název seriálu (pro zobrazení)
-    var seasonNumber: Int? = null,
-    var episodeNumber: Int? = null,
-    var episodeTitle: String? = null, // Název epizody extrahovaný parserem
-    var videoQuality: String? = null, // Kvalita extrahovaná parserem
-    var videoLanguage: String? = null // Jazyk extrahovaný parserem
+    val ident: String, // 1
+    val name: String,  // 2
+    val type: String?, // 3 <<<< TENTO PARAMETR MUSÍ EXISTOVAT
+    val img: String?,  // 4
+    val stripe: String?, // 5
+    val stripe_count: Int?, // 6
+    val size: Long, // 7
+    val queued: Int?, // 8
+    val positive_votes: Int?, // 9
+    val negative_votes: Int?, // 10
+    val password: Int, // 11
+    val displayDate: String? = null, // 12
+    var seriesName: String? = null, // 13
+    var seasonNumber: Int? = null, // 14
+    var episodeNumber: Int? = null, // 15
+    var episodeTitle: String? = null, // 16
+    var videoQuality: String? = null, // 17
+    var videoLanguage: String? = null // 18
 ) : Parcelable
 
 // Datová třída pro celou odpověď z /api/search/
@@ -109,12 +109,12 @@ data class HistoryItem(
 data class HistoryResponse(
     val status: String,
     val total: Int = 0,
-    val historyItems: List<HistoryItem> = emptyList(), // Používáme List, ale pro Bundle se převede na ArrayList
+    val historyItems: List<HistoryItem> = emptyList(),
     val code: Int? = null,
     val message: String? = null
 ) : Parcelable
 
-// ***** DATOVÉ TŘÍDY PRO SERIÁLY (Parcelable) *****
+// DATOVÉ TŘÍDY PRO SERIÁLY (Parcelable)
 @Parcelize
 data class ParsedEpisodeInfo(
     val seasonNumber: Int,
@@ -126,7 +126,7 @@ data class ParsedEpisodeInfo(
 
 @Parcelize
 data class SeriesEpisodeFile(
-    val fileModel: FileModel, // FileModel je již Parcelable
+    val fileModel: FileModel,
     val quality: String?,
     val language: String?
 ) : Parcelable
@@ -136,7 +136,7 @@ data class SeriesEpisode(
     val seasonNumber: Int,
     val episodeNumber: Int,
     var commonEpisodeTitle: String? = null,
-    val files: MutableList<SeriesEpisodeFile> = mutableListOf() // MutableList<SeriesEpisodeFile> je Parcelable, pokud SeriesEpisodeFile je Parcelable
+    val files: MutableList<SeriesEpisodeFile> = mutableListOf()
 ) : Parcelable {
     fun addFile(file: SeriesEpisodeFile) {
         if (files.none { it.fileModel.ident == file.fileModel.ident }) {
@@ -154,7 +154,7 @@ data class SeriesEpisode(
 @Parcelize
 data class SeriesSeason(
     val seasonNumber: Int,
-    val episodes: MutableMap<Int, SeriesEpisode> = mutableMapOf() // MutableMap<Int, SeriesEpisode> je Parcelable, pokud SeriesEpisode je Parcelable
+    val episodes: MutableMap<Int, SeriesEpisode> = mutableMapOf()
 ) : Parcelable {
     fun addEpisodeFile(parsedInfo: ParsedEpisodeInfo, fileModel: FileModel, seriesQuery: String) {
         val episode = episodes.getOrPut(parsedInfo.episodeNumber) {
@@ -188,16 +188,14 @@ data class SeriesSeason(
 @Parcelize
 data class OrganizedSeries(
     val title: String,
-    val seasons: MutableMap<Int, SeriesSeason> = mutableMapOf() // MutableMap<Int, SeriesSeason> je Parcelable, pokud SeriesSeason je Parcelable
+    val seasons: MutableMap<Int, SeriesSeason> = mutableMapOf()
 ) : Parcelable {
     fun getSortedSeasons(): List<SeriesSeason> {
         return seasons.values.sortedBy { it.seasonNumber }
     }
 }
-// **************************************************
 
-
-// Sealed classy pro stavy UI (nemusí být Parcelable, pokud se nepřenáší v Bundle)
+// Sealed classy pro stavy UI
 sealed class SearchState {
     object Idle : SearchState()
     object Loading : SearchState()
@@ -214,5 +212,4 @@ sealed class FileLinkState {
     data class Error(val message: String) : FileLinkState()
 }
 
-// Objekt pro reprezentaci akce "Načíst další"
 object LoadMoreAction

@@ -26,6 +26,20 @@
         <item name="android:textSize">20sp</item>
     </style>
 
+    <style name="Theme.WSPlayer.Dialog.Transparent" parent="Theme.AppCompat.Dialog">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+    </style>
 
+    <style name="Theme.WSPlayer.CustomTvSearch" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">@color/tv_background_color</item>
+        <item name="android:colorBackground">@color/tv_background_color</item>
+
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:textColorSecondary">@color/lb_tv_white</item> <item name="android:textColorHint">#A0A0A0</item> <item name="colorAccent">@color/tv_accent</item>
+        <item name="colorPrimary">@color/tv_brand_primary</item> </style>
 
 </resources>

@@ -17,27 +17,39 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintWidth_max="700dp"  app:layout_constraintHorizontal_bias="0.5">
+        app:layout_constraintWidth_max="700dp"
+        app:layout_constraintHorizontal_bias="0.5">
 
         <EditText
             android:id="@+id/etSearchQueryTv"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="3" android:hint="@string/search_hint_tv_series"
+            android:layout_weight="3"
+            android:hint="@string/search_hint_tv_series"
             android:inputType="text"
             android:imeOptions="actionSearch"
-            android:background="@drawable/bg_edittext_tv" android:textColor="@android:color/white"
+            android:background="@drawable/bg_edittext_tv"
+            android:textColor="@android:color/white"
             android:textColorHint="#A0A0A0"
             android:padding="16dp"
-            android:nextFocusUp="@id/etSearchQueryTv" android:nextFocusDown="@+id/tv_search_results_container" android:nextFocusLeft="@id/etSearchQueryTv" android:nextFocusRight="@+id/btnSearchTv"/> <Button
-        android:id="@+id/btnSearchTv"
-        android:layout_width="0dp"
-        android:layout_height="match_parent" android:layout_weight="1" android:text="@string/search_button_text" android:backgroundTint="@color/tv_accent" android:textColor="@android:color/white"
-        android:layout_marginStart="8dp"
-        android:nextFocusUp="@id/btnSearchTv"
-        android:nextFocusDown="@+id/tv_search_results_container"
-        android:nextFocusLeft="@id/etSearchQueryTv"
-        android:nextFocusRight="@id/btnSearchTv"/>
+            android:nextFocusUp="@id/etSearchQueryTv"
+            android:nextFocusDown="@+id/tv_search_results_container"
+            android:nextFocusLeft="@id/etSearchQueryTv"
+            android:nextFocusRight="@+id/btnSearchTv"/>
+
+        <Button
+            android:id="@+id/btnSearchTv"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="@string/search_button_text"
+            android:backgroundTint="@color/tv_accent"
+            android:textColor="@android:color/white"
+            android:layout_marginStart="8dp"
+            android:nextFocusUp="@id/btnSearchTv"
+            android:nextFocusDown="@+id/tv_search_results_container"
+            android:nextFocusLeft="@id/etSearchQueryTv"
+            android:nextFocusRight="@id/btnSearchTv"/>
     </LinearLayout>
 
     <TextView
@@ -47,7 +59,8 @@
         android:layout_marginTop="8dp"
         android:gravity="center"
         android:textColor="?android:attr/textColorSecondary"
-        android:visibility="gone" tools:text="Vyhledávám..."
+        android:visibility="gone"
+        tools:text="Vyhledávám..."
         tools:visibility="visible"
         app:layout_constraintTop_toBottomOf="@id/searchBarContainer"
         app:layout_constraintStart_toStartOf="parent"
@@ -58,7 +71,9 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
-        android:descendantFocusability="afterDescendants" android:focusable="true" app:layout_constraintTop_toBottomOf="@+id/tvSearchStatus"
+        android:descendantFocusability="afterDescendants"
+        android:focusable="false" android:nextFocusUp="@id/etSearchQueryTv"
+        app:layout_constraintTop_toBottomOf="@+id/tvSearchStatus"
         app:layout_constraintBottom_toTopOf="@+id/customSearchDetailsPanel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
@@ -69,18 +84,22 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="#CC000000" android:visibility="gone" app:layout_constraintBottom_toBottomOf="parent"
+        android:background="#CC000000"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        tools:visibility="visible"> <TextView
-        android:id="@+id/tvCustomSearchDetailTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceLarge"
-        android:textColor="@android:color/white"
-        android:maxLines="2"
-        android:ellipsize="end"
-        tools:text="Detailní název souboru" />
+        tools:visibility="visible">
+
+        <TextView
+            android:id="@+id/tvCustomSearchDetailTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceLarge"
+            android:textColor="@android:color/white"
+            android:maxLines="2"
+            android:ellipsize="end"
+            tools:text="Detailní název souboru" />
 
         <TextView
             android:id="@+id/tvCustomSearchDetailType"
@@ -104,7 +123,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceSmall"
-            android:textColor="@android:color/tertiary_text_light" android:layout_marginTop="4dp"
+            android:textColor="@android:color/tertiary_text_light"
+            android:layout_marginTop="4dp"
             tools:text="Kvalita: 1080p, Jazyk: CZ+EN" />
     </LinearLayout>
 

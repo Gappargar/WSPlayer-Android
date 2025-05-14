@@ -1,6 +1,5 @@
 package com.example.wsplayer.ui.tv
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -11,19 +10,16 @@ import android.widget.Toast
 import androidx.leanback.app.RowsSupportFragment
 import androidx.leanback.widget.*
 import androidx.lifecycle.ViewModelProvider
-import com.example.wsplayer.R
+import com.example.wsplayer.R // Import R z vaší aplikace
 import com.example.wsplayer.data.api.WebshareApiService
-import com.example.wsplayer.data.models.FileLinkState
 import com.example.wsplayer.data.models.FileModel
 import com.example.wsplayer.data.models.OrganizedSeries
-// ***** PŘIDANÉ/OVĚŘENÉ EXPLICITNÍ IMPORTY *****
 import com.example.wsplayer.data.models.SeriesSeason
 import com.example.wsplayer.data.models.SeriesEpisode
 import com.example.wsplayer.data.models.SeriesEpisodeFile
-// *********************************************
 import com.example.wsplayer.ui.search.SearchViewModel
 import com.example.wsplayer.ui.search.SearchViewModelFactory
-import com.example.wsplayer.ui.tv.compose.ComposeEpisodeSelectionDialogFragment // Import pro Compose dialog
+import com.example.wsplayer.ui.tv.compose.ComposeEpisodeSelectionDialogFragment
 import com.example.wsplayer.ui.tv.presenters.CardPresenter
 
 class TvSearchResultsFragment : RowsSupportFragment(),
@@ -96,7 +92,7 @@ class TvSearchResultsFragment : RowsSupportFragment(),
             showInitial -> displayInitialSearchMessageInFragment(rowsAdapter)
             currentOrganizedSeries != null || !currentOtherVideos.isNullOrEmpty() -> {
                 displayOrganizedResultsInFragment(
-                    currentOrganizedSeries ?: OrganizedSeries("Neznámý seriál"), // Poskytnutí výchozího názvu
+                    currentOrganizedSeries ?: OrganizedSeries("Neznámý seriál"),
                     currentOtherVideos ?: emptyList(),
                     rowsAdapter
                 )
@@ -105,42 +101,29 @@ class TvSearchResultsFragment : RowsSupportFragment(),
                 displayInitialSearchMessageInFragment(rowsAdapter)
             }
         }
-        setupEventListeners()
-        observeFileLinkState()
-    }
 
-    private fun observeFileLinkState() {
-        viewModel.fileLinkState.observe(viewLifecycleOwner) { state ->
-            when (state) {
-                is FileLinkState.LoadingLink -> {
-                    Toast.makeText(activity, getString(R.string.getting_link_toast), Toast.LENGTH_SHORT).show()
+        setupEventListeners()
+
+        verticalGridView?.nextFocusUpId = com.example.wsplayer.R.id.etSearchQueryTv
+        Log.d(TAG, "Set nextFocusUpId for verticalGridView to etSearchQueryTv")
+        // ***************************************************************
+
+        // ***** MANUÁLNÍ ZACHYCENÍ DPAD_UP NA PRVNÍ POLOŽCE *****
+        verticalGridView?.setOnKeyListener { _, keyCode, event ->
+            if (event.action == android.view.KeyEvent.ACTION_DOWN &&
+                keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP
+            ) {
+                val selectedPosition = verticalGridView?.selectedPosition ?: -1
+                if (selectedPosition == 0) {
+                    Log.d(TAG, "DPAD_UP zachycen na první položce – přesun fokusu na vyhledávací pole")
+                    requireActivity().findViewById<View>(R.id.etSearchQueryTv)?.requestFocus()
+                    return@setOnKeyListener true
                 }
-                is FileLinkState.LinkSuccess -> {
-                    if (state.fileUrl.isNotEmpty()) {
-                        val playIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(state.fileUrl), "video/*")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        if (playIntent.resolveActivity(requireActivity().packageManager) != null) {
-                            startActivity(playIntent)
-                        } else {
-                            Toast.makeText(activity, getString(R.string.no_video_player_app_toast), Toast.LENGTH_LONG).show()
-                        }
-                    } else {
-                        Toast.makeText(activity, getString(R.string.empty_link_error_toast), Toast.LENGTH_LONG).show()
-                    }
-                    viewModel.resetFileLinkState()
-                }
-                is FileLinkState.Error -> {
-                    if (!state.message.contains("přihlášení", ignoreCase = true)) {
-                        Toast.makeText(activity, getString(R.string.link_error_toast, state.message), Toast.LENGTH_LONG).show()
-                    }
-                    viewModel.resetFileLinkState()
-                }
-                is FileLinkState.Idle -> { /* Do nothing */ }
             }
+            false
         }
     }
+
 
 
     private fun displayInitialSearchMessageInFragment(rowsAdapter: ArrayObjectAdapter) {
@@ -174,11 +157,11 @@ class TvSearchResultsFragment : RowsSupportFragment(),
         var headerIdCounter = 0L
 
         if (series.seasons.isNotEmpty()) {
-            series.getSortedSeasons().forEach { season: SeriesSeason -> // Explicitní typ
+            series.getSortedSeasons().forEach { season: SeriesSeason ->
                 if (season.episodes.isNotEmpty()) {
                     val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    season.getSortedEpisodes().forEach { episode: SeriesEpisode -> // Explicitní typ
-                        episode.files.firstOrNull()?.let { seriesEpisodeFile: SeriesEpisodeFile -> // Explicitní typ
+                    season.getSortedEpisodes().forEach { episode: SeriesEpisode ->
+                        episode.files.firstOrNull()?.let { seriesEpisodeFile: SeriesEpisodeFile ->
                             listRowAdapter.add(seriesEpisodeFile.fileModel)
                         }
                     }
@@ -194,7 +177,7 @@ class TvSearchResultsFragment : RowsSupportFragment(),
         if (otherVideos.isNotEmpty()) {
             val moviesHeader = HeaderItem(headerIdCounter++, "Filmy a jiné video")
             val moviesListAdapter = ArrayObjectAdapter(cardPresenter)
-            otherVideos.forEach { fileModel: FileModel -> // Explicitní typ
+            otherVideos.forEach { fileModel: FileModel ->
                 moviesListAdapter.add(fileModel)
             }
             rowsAdapter.add(ListRow(moviesHeader, moviesListAdapter))
@@ -211,13 +194,13 @@ class TvSearchResultsFragment : RowsSupportFragment(),
         onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
             if (item is FileModel) {
                 Log.d(TAG, "Item clicked in ResultsFragment: ${item.name} (ident: ${item.ident})")
-                val clickedSeriesEpisode: SeriesEpisode? = findSeriesEpisodeForFileModel(item) // Explicitní typ
+                val clickedSeriesEpisode: SeriesEpisode? = findSeriesEpisodeForFileModel(item)
 
                 if (clickedSeriesEpisode != null) {
                     if (clickedSeriesEpisode.files.size > 1) {
                         Log.d(TAG, "Episode '${item.episodeTitle ?: item.name}' has ${clickedSeriesEpisode.files.size} files.")
                         val dialog = ComposeEpisodeSelectionDialogFragment.newInstance(
-                            clickedSeriesEpisode.files, // Toto je List<SeriesEpisodeFile>
+                            clickedSeriesEpisode.files,
                             "S${clickedSeriesEpisode.seasonNumber}E${clickedSeriesEpisode.episodeNumber}: ${clickedSeriesEpisode.commonEpisodeTitle ?: item.name}"
                         )
                         dialog.setTargetFragment(this@TvSearchResultsFragment, 0)
@@ -241,16 +224,7 @@ class TvSearchResultsFragment : RowsSupportFragment(),
         val seasonNum = clickedFileModel.seasonNumber
         val episodeNum = clickedFileModel.episodeNumber
         if (seasonNum != null && episodeNum != null) {
-            // Iterujeme přes hodnoty mapy seasons, což jsou SeriesSeason objekty
-            currentOrganizedSeries?.seasons?.values?.forEach { season: SeriesSeason ->
-                // Iterujeme přes hodnoty mapy episodes, což jsou SeriesEpisode objekty
-                season.episodes.values.forEach { episode: SeriesEpisode ->
-                    // Kontrolujeme, zda některý SeriesEpisodeFile v epizodě má shodný ident
-                    if (episode.files.any { seriesEpisodeFile: SeriesEpisodeFile -> seriesEpisodeFile.fileModel.ident == clickedFileModel.ident }) {
-                        return episode
-                    }
-                }
-            }
+            return currentOrganizedSeries?.seasons?.get(seasonNum)?.episodes?.get(episodeNum)
         }
         return null
     }
@@ -258,6 +232,10 @@ class TvSearchResultsFragment : RowsSupportFragment(),
     override fun onEpisodeFileSelected(selectedFileModel: FileModel) {
         Log.d(TAG, "File selected from Compose dialog in ResultsFragment: ${selectedFileModel.name}")
         viewModel.getFileLinkForFile(selectedFileModel)
+    }
+
+    override fun onEpisodeSelectionCancelled() {
+        Log.d(TAG, "Episode selection was cancelled in ResultsFragment.")
     }
 
     override fun onDetach() {
