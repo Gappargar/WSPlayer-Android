@@ -16,4 +16,9 @@
     <color name="tv_card_selected_info_background">#E60073E6</color>
     <color name="lb_tv_white">#F1F1F1</color>
     <color name="tv_row_header_description_color">#A0A0A0</color>
+    <color name="tv_nav_rail_background">#2C2C2C</color>
+    <color name="tv_nav_text_color">@color/lb_tv_white</color>
+    <color name="tv_nav_icon_tint_normal">#B3FFFFFF</color>
+    <color name="tv_nav_icon_tint_focused">@color/white</color>
+
 </resources>
