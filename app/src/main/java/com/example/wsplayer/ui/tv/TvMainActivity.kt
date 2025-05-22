@@ -3,24 +3,22 @@ package com.example.wsplayer.ui.tv
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.FocusFinder
+import android.view.KeyEvent
 import android.view.View
 import androidx.fragment.app.FragmentActivity
-// ViewModel a Factory pro přihlášení, pokud je budete používat místo přímého AuthTokenManageru
-// import androidx.lifecycle.ViewModelProvider
-// import com.example.wsplayer.ui.auth.LoginViewModel
-// import com.example.wsplayer.ui.auth.LoginViewModelFactory
-import com.example.wsplayer.AuthTokenManager // Váš AuthTokenManager
+import com.example.wsplayer.AuthTokenManager
 import com.example.wsplayer.R
 import com.example.wsplayer.data.models.FileModel
-import com.example.wsplayer.databinding.ActivityTvMainBinding // ViewBinding pro activity_tv_main.xml
-import com.example.wsplayer.ui.settings.SettingsActivity // Pro spuštění nastavení
+import com.example.wsplayer.databinding.ActivityTvMainBinding
+import com.example.wsplayer.ui.settings.SettingsActivity
 import java.text.NumberFormat
 
 class TvMainActivity : FragmentActivity(), TvBrowseFragment.OnFileSelectedListener {
 
     private val TAG = "TvMainActivity"
     private lateinit var binding: ActivityTvMainBinding
-    private lateinit var authTokenManager: AuthTokenManager // Používáme váš AuthTokenManager
+    private lateinit var authTokenManager: AuthTokenManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,9 +32,8 @@ class TvMainActivity : FragmentActivity(), TvBrowseFragment.OnFileSelectedListen
             val loginIntent = Intent(this, CustomTvLoginActivity::class.java)
             loginIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(loginIntent)
-            finish() // Ukončit tuto aktivitu, aby se na ni uživatel nemohl vrátit tlačítkem Zpět
-            Log.d(TAG, "Finished TvMainActivity because user is not logged in.")
-            return // Důležité ukončit onCreate zde
+            finish()
+            return
         }
 
         Log.d(TAG, "Token found, setting up main TV content.")
@@ -45,49 +42,27 @@ class TvMainActivity : FragmentActivity(), TvBrowseFragment.OnFileSelectedListen
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                // Ujistěte se, že R.id.tv_main_fragment_container odpovídá ID FrameLayoutu
-                // ve vašem activity_tv_main.xml (dokument activity_tv_main_xml_with_nav_and_details)
                 .replace(R.id.tv_main_fragment_container, TvBrowseFragment())
                 .commitNow()
-            Log.d(TAG, "TvBrowseFragment added to container.")
-        } else {
-            Log.d(TAG, "Restoring activity state, fragment should already be present.")
         }
 
-        // Nastavení listenerů pro navigační menu
         setupNavigationMenuListeners()
-
-        // Na začátku skryjeme panel detailů
-        // Ujistěte se, že binding.detailsPanel odkazuje na správné ID z vašeho layoutu
         binding.detailsPanel.visibility = View.GONE
-        Log.d(TAG, "onCreate finished for logged-in user.")
     }
 
     private fun setupNavigationMenuListeners() {
-        // Ujistěte se, že ID tlačítek (nav_search_button, nav_settings_button)
-        // odpovídají vašemu activity_tv_main.xml
         binding.navSearchButton.setOnClickListener {
-            Log.d(TAG, "Search navigation button clicked.")
-            // Spustíme CustomTvSearchActivity (předpokládáme, že existuje a je deklarována v manifestu)
-            val intent = Intent(this, CustomTvSearchActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, CustomTvSearchActivity::class.java))
         }
 
         binding.navSettingsButton.setOnClickListener {
-            Log.d(TAG, "Settings navigation button clicked.")
-            // TODO: V budoucnu zvážit TV specifickou obrazovku pro nastavení
-            val intent = Intent(this, SettingsActivity::class.java) // Prozatím spouští mobilní verzi
-            startActivity(intent)
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
     }
 
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "onResume started")
-        // Znovu zkontrolovat přihlášení pro případ, že se uživatel odhlásil v jiné aktivitě
-        // nebo se vrací z přihlašovací obrazovky.
         if (authTokenManager.getAuthToken().isNullOrEmpty()) {
-            Log.w(TAG, "No token found onResume, redirecting to CustomTvLoginActivity.")
             val loginIntent = Intent(this, CustomTvLoginActivity::class.java)
             loginIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(loginIntent)
@@ -95,10 +70,36 @@ class TvMainActivity : FragmentActivity(), TvBrowseFragment.OnFileSelectedListen
         }
     }
 
-    // Implementace listeneru z TvBrowseFragment pro zobrazení detailů
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            val currentFocused = currentFocus
+            if (currentFocused != null && isChildOfFragmentContainer(currentFocused)) {
+                val nextFocus = FocusFinder.getInstance().findNextFocus(
+                    binding.tvMainFragmentContainer, currentFocused, View.FOCUS_LEFT
+                )
+                if (nextFocus == null) {
+                    binding.navSearchButton.requestFocus()
+                    return true
+                } else {
+                    nextFocus.requestFocus()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun isChildOfFragmentContainer(view: View): Boolean {
+        val fragmentContainer = binding.tvMainFragmentContainer
+        var parent = view.parent
+        while (parent is View) {
+            if (parent == fragmentContainer) return true
+            parent = parent.parent
+        }
+        return false
+    }
+
     override fun onFileSelectedInBrowse(file: FileModel?) {
-        // Ujistěte se, že ID prvků v binding (tvDetailTitle, tvDetailType, atd.)
-        // odpovídají vašemu activity_tv_main.xml
         if (file != null) {
             binding.tvDetailTitle.text = file.name
             binding.tvDetailType.text = "Typ: ${file.type?.uppercase() ?: "N/A"}"
@@ -111,20 +112,17 @@ class TvMainActivity : FragmentActivity(), TvBrowseFragment.OnFileSelectedListen
             var extraInfo = ""
             if (!file.videoQuality.isNullOrBlank()) extraInfo += "Kvalita: ${file.videoQuality} "
             if (!file.videoLanguage.isNullOrBlank()) extraInfo += "Jazyk: ${file.videoLanguage} "
-            if (!file.displayDate.isNullOrBlank()) extraInfo += "(${file.displayDate})" // Datum z historie
+            if (!file.displayDate.isNullOrBlank()) extraInfo += "(${file.displayDate})"
 
             binding.tvDetailInfo.text = extraInfo.trim()
             binding.tvDetailInfo.visibility = if (extraInfo.isNotBlank()) View.VISIBLE else View.GONE
 
             binding.detailsPanel.visibility = View.VISIBLE
-            Log.d(TAG, "Details updated for: ${file.name}")
         } else {
             binding.detailsPanel.visibility = View.GONE
-            Log.d(TAG, "Details panel hidden.")
         }
     }
 
-    // Pomocná funkce pro formátování velikosti souboru
     private fun formatFileSize(sizeInBytes: Long): String {
         if (sizeInBytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB", "TB")

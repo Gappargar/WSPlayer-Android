@@ -1,34 +1,34 @@
-package com.example.wsplayer.ui.tv
+package com.example.wsplayer.ui.tv.compose // Předpokládaný balíček dle chyby
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
-import androidx.leanback.app.RowsSupportFragment
-import androidx.leanback.widget.ArrayObjectAdapter
-import androidx.leanback.widget.FocusHighlight
-import androidx.leanback.widget.HeaderItem
-import androidx.leanback.widget.ListRow
-import androidx.leanback.widget.ListRowPresenter
-import androidx.leanback.widget.OnItemViewClickedListener
-import androidx.leanback.widget.OnItemViewSelectedListener
+import androidx.leanback.app.RowsSupportFragment // Předpokládáme, že stále dědí z RowsSupportFragment
+import androidx.leanback.widget.*
 import androidx.lifecycle.ViewModelProvider
 import com.example.wsplayer.R
+import com.example.wsplayer.data.api.WebshareApiService
 import com.example.wsplayer.data.models.FileModel
 import com.example.wsplayer.data.models.OrganizedSeries
+import com.example.wsplayer.data.models.SeriesSeason
 import com.example.wsplayer.data.models.SeriesEpisode
 import com.example.wsplayer.data.models.SeriesEpisodeFile
-import com.example.wsplayer.data.models.SeriesSeason
 import com.example.wsplayer.ui.search.SearchViewModel
-import com.example.wsplayer.ui.tv.compose.ComposeEpisodeSelectionDialogFragment
+import com.example.wsplayer.ui.search.SearchViewModelFactory
+import com.example.wsplayer.ui.tv.TvBrowseFragment // Pro SingleTextViewPresenter
 import com.example.wsplayer.ui.tv.presenters.CardPresenter
 
-class TvSearchResultsFragment : RowsSupportFragment(),
+// Ujistěte se, že cesta k tomuto souboru je správná, pokud jste ho přejmenovali/přesunuli
+// import com.example.wsplayer.ui.tv.compose.ComposeEpisodeSelectionDialogFragment
+
+class TvSearchFragment : RowsSupportFragment(), // Název třídy dle chyby
     ComposeEpisodeSelectionDialogFragment.OnEpisodeFileSelectedListener {
 
-    private val TAG = "TvSearchResultsFragment"
+    private val TAG = "TvSearchFragmentCompose" // Upravený TAG pro odlišení
 
     private lateinit var viewModel: SearchViewModel
     private var activityListener: OnFileSelectedListener? = null
@@ -51,8 +51,8 @@ class TvSearchResultsFragment : RowsSupportFragment(),
             otherVideos: List<FileModel>?,
             showInitialMessage: Boolean = false,
             errorMessage: String? = null
-        ): TvSearchResultsFragment {
-            val fragment = TvSearchResultsFragment()
+        ): TvSearchFragment { // Vrací novou instanci TvSearchFragment
+            val fragment = TvSearchFragment()
             val args = Bundle()
             if (series != null) args.putParcelable(ARG_SERIALIZED_SERIES, series)
             if (otherVideos != null) args.putParcelableArrayList(ARG_SERIALIZED_OTHER_VIDEOS, ArrayList(otherVideos))
@@ -68,7 +68,7 @@ class TvSearchResultsFragment : RowsSupportFragment(),
         if (context is OnFileSelectedListener) {
             activityListener = context
         } else {
-            Log.e(TAG, "$context must implement TvSearchResultsFragment.OnFileSelectedListener")
+            Log.e(TAG, "$context must implement TvSearchFragment.OnFileSelectedListener")
         }
     }
 
@@ -80,9 +80,6 @@ class TvSearchResultsFragment : RowsSupportFragment(),
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         Log.d(TAG, "onViewCreated")
-
-        verticalGridView?.setPadding(24, 12, 24, 12)
-        verticalGridView?.clipToPadding = false
 
         val rowsAdapter = ArrayObjectAdapter(ListRowPresenter(FocusHighlight.ZOOM_FACTOR_MEDIUM))
         adapter = rowsAdapter
@@ -106,38 +103,8 @@ class TvSearchResultsFragment : RowsSupportFragment(),
                 displayInitialSearchMessageInFragment(rowsAdapter)
             }
         }
-
         setupEventListeners()
-
-        // Fokus mezi výsledky a menu/search
-        verticalGridView?.setOnKeyListener { _, keyCode, event ->
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                val selectedPosition = verticalGridView?.selectedPosition ?: -1
-
-                // Šipka vlevo -> fokus na menu/lupu
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    requireActivity().findViewById<View>(R.id.nav_search_button)?.requestFocus()
-                    return@setOnKeyListener true
-                }
-                // Šipka nahoru na první položce -> fokus na search pole
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP && selectedPosition == 0) {
-                    requireActivity().findViewById<View>(R.id.etSearchQueryTv)?.requestFocus()
-                    return@setOnKeyListener true
-                }
-            }
-            false
-        }
-    }
-
-    fun requestFocusOnResults() {
-        verticalGridView?.post {
-            val firstFocusable = verticalGridView?.getChildAt(0)
-            if (firstFocusable != null) {
-                firstFocusable.requestFocus()
-            } else {
-                verticalGridView?.requestFocus()
-            }
-        }
+        // observeFileLinkState() // Přesunuto do CustomTvSearchActivity
     }
 
     private fun displayInitialSearchMessageInFragment(rowsAdapter: ArrayObjectAdapter) {
@@ -217,7 +184,7 @@ class TvSearchResultsFragment : RowsSupportFragment(),
                             clickedSeriesEpisode.files,
                             "S${clickedSeriesEpisode.seasonNumber}E${clickedSeriesEpisode.episodeNumber}: ${clickedSeriesEpisode.commonEpisodeTitle ?: item.name}"
                         )
-                        dialog.setTargetFragment(this@TvSearchResultsFragment, 0)
+                        dialog.setTargetFragment(this@TvSearchFragment, 0)
                         parentFragmentManager.let { dialog.show(it, "ComposeEpisodeFileSelectionDialog") }
                     } else if (clickedSeriesEpisode.files.isNotEmpty()) {
                         viewModel.getFileLinkForFile(clickedSeriesEpisode.files.first().fileModel)
@@ -248,9 +215,13 @@ class TvSearchResultsFragment : RowsSupportFragment(),
         viewModel.getFileLinkForFile(selectedFileModel)
     }
 
+    // ***** PŘIDÁNA CHYBĚJÍCÍ METODA S override *****
     override fun onEpisodeSelectionCancelled() {
         Log.d(TAG, "Episode selection was cancelled in ResultsFragment.")
+        // Zde můžete provést jakékoli akce potřebné po zrušení dialogu,
+        // například obnovit focus na původní prvek, pokud je to nutné.
     }
+    // ********************************************
 
     override fun onDetach() {
         super.onDetach()
